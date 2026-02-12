@@ -321,11 +321,11 @@ export default function MapaGoogleMapsAlertVel({ ubicaciones,velocidadesWaze1,ve
   const iconUrlLluvias2 = '/lluvias2.png';
   const iconUrlLluvias3 = '/lluvias3.png';
   const iconUrlLluvias4 = '/lluvias4.png';
-  const iconUrlLluvias0Gif = '/lluvias0.png';
-  const iconUrlLluvias1Gif = '/lluvias1.png';
-  const iconUrlLluvias2Gif = '/lluvias2.png';
-  const iconUrlLluvias3Gif = '/lluvias3.png';
-  const iconUrlLluvias4Gif = '/lluvias4.png';
+  const iconUrlLluvias0Gif = '/lluvia0.gif';
+  const iconUrlLluvias1Gif = '/lluvia1.gif';
+  const iconUrlLluvias2Gif = '/lluvia2.gif';
+  const iconUrlLluvias3Gif = '/lluvia3.gif';
+  const iconUrlLluvias4Gif = '/lluvia4.gif';
   const iconUrlCongestion2 = '/congestion2.png';
   const iconUrlClima = '/clima.png';
   const iconCantidadAlertasWaze = '/cantidadAlertas.png';
