@@ -1,0 +1,91 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: suanet-frontend-deployment
+  namespace: suanet-dev
+  labels:
+    app: suanet-frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: suanet-frontend
+  template:
+    metadata:
+      labels:
+        app: suanet-frontend
+        version: "1.0"  # Auto-updated
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "3000"
+        prometheus.io/path: "/api/health"
+    spec:
+      nodeSelector:
+        workload: user
+
+      # ACR authentication
+      imagePullSecrets:
+      - name: acr-secret
+
+      containers:
+      - name: suanet-frontend
+        image: crsuanetsdmdev.azurecr.io/suanet-frontend-dev:1.377
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 3000
+        envFrom:
+        - secretRef:
+            name: suanet-frontend-secret
+        resources:
+          limits:
+            memory: "512Mi"  # Increased from 128Mi to prevent OOMKilled
+            cpu: "500m"      # Keep CPU limit reasonable for cluster capacity
+          requests:
+            memory: "256Mi"  # Increased requests to prevent scheduling issues
+            cpu: "250m"
+        # Health checks to monitor application status
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        securityContext:
+          runAsUser: 10001
+          runAsGroup: 10001
+          runAsNonRoot: true
+          readOnlyRootFilesystem: true
+          seccompProfile:
+            type: RuntimeDefault
+          capabilities:
+            drop:
+              - ALL
+          allowPrivilegeEscalation: false
+        volumeMounts:
+        - name: tmp-volume
+          mountPath: /tmp
+        - name: app-data-volume
+          mountPath: /app-data
+        - name: nextjs-cache
+          mountPath: /app/.next/cache
+        - name: kmz-volume
+          mountPath: /app/public/kmz
+      volumes:
+      - name: tmp-volume
+        emptyDir: {}
+      - name: app-data-volume
+        emptyDir: {}
+      - name: nextjs-cache
+        emptyDir: {}
+      - name: kmz-volume
+        emptyDir: {}

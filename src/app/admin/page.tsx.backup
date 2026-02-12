@@ -1,0 +1,172 @@
+'use client'
+
+import { Suspense } from 'react';
+import { Card, Title, Text, Button } from '@tremor/react';
+import { UserGroupIcon, ShieldCheckIcon } from '@heroicons/react/24/outline';
+import Link from 'next/link';
+import LoadingScreen from '../../../components/loadingScreen';
+import { useAuth } from '../../../components/auth/AuthContext';
+
+export default function AdminDashboard() {
+  const { user, isAuthenticated, isLoading } = useAuth();
+
+  // Mostrar loading mientras se carga la autenticación
+  if (isLoading) {
+    return <LoadingScreen />;
+  }
+
+  // Redirigir si no está autenticado
+  if (!isAuthenticated) {
+    return (
+      <div className="p-4 text-center">
+        <h1 className="text-xl text-red-600">Acceso denegado</h1>
+        <p>Debes iniciar sesión para acceder a esta página.</p>
+      </div>
+    );
+  }
+
+  // Verificar que sea administrador
+  if (user?.rol !== 'Administrador') {
+    return (
+      <div className="p-4 text-center">
+        <h1 className="text-xl text-red-600">Acceso restringido</h1>
+        <p>Solo los administradores pueden acceder a esta página.</p>
+        <p className="text-sm text-gray-600 mt-2">Tu rol actual: {user?.rol}</p>
+      </div>
+    );
+  }
+
+  return (
+    <Suspense fallback={<LoadingScreen />}>
+      <main className="p-4 md:p-6 mx-auto max-w-7xl h-screen overflow-y-auto overflow-x-hidden">
+        {/* Header */}
+        <div className="mb-6">
+          <Title className="text-2xl font-bold text-gray-900 mb-2">
+            🔧 Panel de Administración
+          </Title>
+          <Text className="text-gray-600">
+            Gestiona usuarios, roles y permisos del sistema SUANET
+          </Text>
+        </div>
+
+        {/* Información del usuario administrador */}
+        <div className="mb-8">
+          <Card>
+            <div className="flex items-center">
+              <div className="flex-shrink-0">
+                {user.avatar_url ? (
+                  <img 
+                    src={user.avatar_url} 
+                    alt={user.nombre || 'Avatar'}
+                    className="h-12 w-12 rounded-full"
+                  />
+                ) : (
+                  <div className="h-12 w-12 rounded-full bg-blue-500 flex items-center justify-center">
+                    <span className="text-white font-medium text-lg">
+                      {user.nombre?.charAt(0) || 'A'}
+                    </span>
+                  </div>
+                )}
+              </div>
+              <div className="ml-4">
+                <Title className="text-lg">{user.nombre}</Title>
+                <Text className="text-gray-600">{user.email}</Text>
+                <Text className="text-sm font-medium text-blue-600">{user.rol}</Text>
+              </div>
+            </div>
+          </Card>
+        </div>
+
+        {/* Opciones de administración */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Administración de Usuarios */}
+          <Card className="hover:shadow-lg transition-shadow duration-200">
+            <div className="flex items-center mb-4">
+              <UserGroupIcon className="h-8 w-8 text-blue-600 mr-3" />
+              <Title className="text-xl">Administración de Usuarios</Title>
+            </div>
+            <Text className="text-gray-600 mb-4">
+              Gestiona los usuarios autorizados del sistema. Crea, edita y elimina cuentas de usuario, 
+              asigna roles y administra el acceso al sistema.
+            </Text>
+            <div className="flex flex-col space-y-2">
+              <div className="text-sm text-gray-500">
+                • Crear nuevos usuarios
+              </div>
+              <div className="text-sm text-gray-500">
+                • Editar información de usuarios
+              </div>
+              <div className="text-sm text-gray-500">
+                • Asignar roles y permisos
+              </div>
+              <div className="text-sm text-gray-500">
+                • Ver estadísticas de usuarios
+              </div>
+            </div>
+            <div className="mt-6">
+              <Link href="/admin/users">
+                <Button className="w-full bg-blue-600 hover:bg-blue-700">
+                  Gestionar Usuarios
+                </Button>
+              </Link>
+            </div>
+          </Card>
+
+          {/* Administración de Roles */}
+          <Card className="hover:shadow-lg transition-shadow duration-200">
+            <div className="flex items-center mb-4">
+              <ShieldCheckIcon className="h-8 w-8 text-green-600 mr-3" />
+              <Title className="text-xl">Administración de Roles</Title>
+            </div>
+            <Text className="text-gray-600 mb-4">
+              Define y gestiona los roles del sistema. Configura permisos granulares para 
+              controlar el acceso a diferentes módulos y funcionalidades.
+            </Text>
+            <div className="flex flex-col space-y-2">
+              <div className="text-sm text-gray-500">
+                • Crear nuevos roles
+              </div>
+              <div className="text-sm text-gray-500">
+                • Configurar permisos por módulo
+              </div>
+              <div className="text-sm text-gray-500">
+                • Gestionar jerarquía de accesos
+              </div>
+              <div className="text-sm text-gray-500">
+                • Ver distribución de roles
+              </div>
+            </div>
+            <div className="mt-6">
+              <Link href="/admin/roles">
+                <Button className="w-full bg-green-600 hover:bg-green-700">
+                  Gestionar Roles
+                </Button>
+              </Link>
+            </div>
+          </Card>
+        </div>
+
+        {/* Información adicional */}
+        <div className="mt-8">
+          <Card>
+            <Title className="text-lg mb-3">⚠️ Información Importante</Title>
+            <div className="space-y-2">
+              <Text className="text-sm text-gray-600">
+                • Solo los usuarios con rol de <strong>Administrador</strong> pueden acceder a estas funciones
+              </Text>
+              <Text className="text-sm text-gray-600">
+                • Los cambios en roles y permisos se aplican inmediatamente
+              </Text>
+              <Text className="text-sm text-gray-600">
+                • Todas las acciones administrativas quedan registradas en la auditoría del sistema
+              </Text>
+              <Text className="text-sm text-gray-600">
+                • Se recomienda hacer respaldos antes de realizar cambios importantes
+              </Text>
+            </div>
+          </Card>
+        </div>
+      </main>
+    </Suspense>
+  );
+}

@@ -1,0 +1,48 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: suanet-websocket-ingress
+  namespace: suanet-prd
+  annotations:
+    # Production environment: Azure Front Door handles HTTPS termination
+    # Architecture: Client → HTTPS → Azure Front Door (terminates SSL) → HTTP → nginx ingress → backend service
+    #
+    # IMPORTANT: DO NOT enable ssl-redirect - Front Door already handled SSL termination
+    # The traffic arriving at nginx is HTTP (from Front Door), not HTTPS
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+
+    # WebSocket-specific configuration
+    # These annotations are CRITICAL for Socket.IO to work properly
+    nginx.ingress.kubernetes.io/websocket-services: "suanet-backend-service"
+    nginx.ingress.kubernetes.io/proxy-http-version: "1.1"
+
+    # Extended timeouts for long-running WebSocket connections
+    # Socket.IO connections can remain open for hours
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+
+    # Increased buffer sizes for video analytics data
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/proxy-buffer-size: "512k"
+
+    # Session affinity (sticky sessions) - CRITICAL for Socket.IO
+    # Socket.IO needs to maintain connection to the same backend pod
+    nginx.ingress.kubernetes.io/upstream-hash-by: "$binary_remote_addr"
+    nginx.ingress.kubernetes.io/affinity: "cookie"
+    nginx.ingress.kubernetes.io/session-cookie-name: "socketio"
+    nginx.ingress.kubernetes.io/session-cookie-max-age: "172800"  # 48 hours
+
+spec:
+  ingressClassName: nginx
+  # NO TLS section - Azure Front Door manages certificates
+  rules:
+  - host: suanet.movilidadbogota.gov.co
+    http:
+      paths:
+      - path: /socket.io
+        pathType: ImplementationSpecific  # Important for Socket.IO path handling
+        backend:
+          service:
+            name: suanet-backend-service
+            port:
+              number: 8080

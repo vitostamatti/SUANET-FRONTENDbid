@@ -1,0 +1,113 @@
+# ============================================================================
+# Dockerfile para Producción - SUANET Frontend
+# Puerto: 80
+# Optimizado para despliegue en AKS con seguridad hardened
+# ============================================================================
+
+# Etapa de construcción
+FROM node:20-alpine AS builder
+
+# ✅ NUEVO: Definir build args para variables de entorno de Next.js
+ARG NEXT_PUBLIC_BACKEND_URL=https://suanet.movilidadbogota.gov.co
+ARG NEXT_PUBLIC_FRONTEND_URL=https://suanet.movilidadbogota.gov.co
+ARG NEXT_PUBLIC_GOOGLE_CLIENT_ID
+ARG NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
+ARG NEXT_PUBLIC_POWERBI_DESCRIPTIVO_URL
+ARG NEXT_PUBLIC_POWERBI_TRAFICO_URL
+ARG APP_VERSION=prd
+
+# ✅ NUEVO: Establecer las variables como ENV para que Next.js las empaquete
+ENV NEXT_PUBLIC_BACKEND_URL=${NEXT_PUBLIC_BACKEND_URL}
+ENV NEXT_PUBLIC_FRONTEND_URL=${NEXT_PUBLIC_FRONTEND_URL}
+ENV NEXT_PUBLIC_GOOGLE_CLIENT_ID=${NEXT_PUBLIC_GOOGLE_CLIENT_ID}
+ENV NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=${NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}
+ENV NEXT_PUBLIC_POWERBI_DESCRIPTIVO_URL=${NEXT_PUBLIC_POWERBI_DESCRIPTIVO_URL}
+ENV NEXT_PUBLIC_POWERBI_TRAFICO_URL=${NEXT_PUBLIC_POWERBI_TRAFICO_URL}
+ENV NEXT_PUBLIC_APP_VERSION=${APP_VERSION}
+
+WORKDIR /app
+
+# Copiar archivos de configuración
+COPY package*.json ./
+COPY tailwind.config.js ./
+COPY tailwind.config.ts ./
+COPY next.config.js ./
+COPY tsconfig.json ./
+
+# Instalar herramientas necesarias para build
+RUN apk update && \
+    apk add --no-cache \
+      bash \
+      tzdata \
+      curl
+
+# Instalar todas las dependencias (incluyendo devDependencies para el build)
+RUN npm ci && \
+    npm cache clean --force
+
+# Copiar el resto del código fuente
+COPY . .
+
+# Construir la aplicación Next.js - fallará si hay errores críticos
+RUN npm run build && \
+    echo "Build completed. Checking .next directory..." && \
+    ls -la .next/ && \
+    echo "Checking .next/BUILD_ID..." && \
+    test -f .next/BUILD_ID && echo "BUILD_ID found!" || (echo "ERROR: BUILD_ID not found!" && exit 1)
+
+# ============================================================================
+# Etapa de producción - Imagen optimizada y segura
+# ============================================================================
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Crear un usuario no root con UID/GID específicos que coincidan con el deployment.yaml
+RUN addgroup -g 10001 -S appgroup && adduser -u 10001 -S appuser -G appgroup
+
+# Copiar solo lo necesario desde la etapa de build
+COPY --from=builder --chown=appuser:appgroup /app/package*.json ./
+COPY --from=builder --chown=appuser:appgroup /app/next.config.js ./
+COPY --from=builder --chown=appuser:appgroup /app/server.js ./
+COPY --from=builder --chown=appuser:appgroup /app/.next ./.next
+COPY --from=builder --chown=appuser:appgroup /app/public ./public
+COPY --from=builder --chown=appuser:appgroup /app/scripts ./scripts
+COPY --from=builder --chown=appuser:appgroup /app/node_modules ./node_modules
+
+# Instalar solo herramientas esenciales para producción
+RUN apk update && \
+    apk add --no-cache \
+      bash \
+      curl \
+      tzdata && \
+    cp /usr/share/zoneinfo/America/Bogota /etc/localtime && \
+    echo "America/Bogota" > /etc/timezone && \
+    rm -rf /var/cache/apk/*
+
+# Crear directorio public si no existe y asignar permisos
+RUN mkdir -p /app/public && \
+    chown -R appuser:appgroup /app/public && \
+    chmod -R 755 /app/public
+
+# Crear directorio para cache de Next.js con permisos correctos
+RUN mkdir -p /app/.next/cache && \
+    chown -R appuser:appgroup /app/.next && \
+    chmod -R 755 /app/.next
+
+# Cambiar al usuario no root
+USER appuser
+
+# Exponer el puerto 3000 (producción)
+EXPOSE 3000
+
+# Variables de entorno para producción
+ENV PORT=3000
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+
+# Health check optimizado para puerto 3000
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+  CMD curl -f http://localhost:3000/health || exit 1
+
+# Comando para ejecutar la aplicación
+CMD ["node", "server.js"]

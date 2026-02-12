@@ -1,0 +1,15 @@
+# apiVersion: cert-manager.io/v1
+# kind: ClusterIssuer
+# metadata:
+#   name: letsencrypt-dev
+# spec:
+#   acme:
+#     # Cambiar al servidor de producción
+#     server: https://acme-v02.api.letsencrypt.org/directory
+#     email: lballesterosp@movilidadbogota.gov.co
+#     privateKeySecretRef:
+#       name: letsencrypt-dev
+#     solvers:
+#     - http01:
+#         ingress:
+#           class: nginx

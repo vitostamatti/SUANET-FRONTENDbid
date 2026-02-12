@@ -1,0 +1,2 @@
+# This file ensures the kmz directory is included in git and Docker builds
+# KMZ files will be dynamically downloaded here by the server

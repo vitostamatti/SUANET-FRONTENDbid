@@ -1,0 +1,5 @@
+Test de verificación del servidor MCP filesystem-suanet-mcp
+Fecha: 2025-06-01 22:06:00
+Estado: Funcionando correctamente
+
+Este archivo fue creado como parte de la verificación del servidor MCP.

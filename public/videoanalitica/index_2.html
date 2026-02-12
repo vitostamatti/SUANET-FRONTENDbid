@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Videoanalítica</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.6.1/socket.io.min.js"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+</head>
+<body>
+    <h1>Actualizaciones en tiempo real videoanalitica</h1>
+    <label for="channelInput">Número de Canal:</label>
+    <input type="text" id="channelInput" placeholder="Ej: 89">
+    <button id="subscribeButton">Subscribe</button>
+    <button id="unsubscribeButton">Unsubscribe</button>
+    <br><br>
+
+    <div id="channelInfo">Canal: </div>
+    <div id="statusInfo">Estado: </div>
+    <div id="remainingTime">Tiempo restante: </div>
+    <br>
+    <img id="channelImage" src="" alt="Imagen del canal" style="max-width: 100%; height: auto;">
+    <br>
+    <table border="1" id="dataTable">
+        <thead>
+            <tr>
+                <th>Clase</th>
+                <th>Cantidad</th>
+                <th>Velocidad</th>
+            </tr>
+        </thead>
+        <tbody>
+        </tbody>
+    </table>
+
+    <script>
+        let socket = null;
+
+        // Modificar la función connectWebSocket
+        function connectWebSocket(channel_id) {
+            console.log("Conectando al WebSocket con canal:", channel_id);
+            
+            if (socket) {
+                console.log("Desconectando socket existente");
+                socket.removeAllListeners();
+                socket.disconnect();
+                socket = null;
+            }
+            
+            try {
+                console.log("Iniciando conexión al servidor WebSocket");
+                const backendUrl = window.location.origin;
+                console.log("Conectando a:", backendUrl);
+                
+                socket = io(backendUrl, {
+                    path: '/socket.io',
+                    transports: ['polling', 'websocket'], 
+                    reconnection: true,
+                    reconnectionAttempts: 5,
+                    reconnectionDelay: 1000,
+                    timeout: 20000,
+                    forceNew: true,
+                    query: {
+                        clientId: 'web_' + new Date().getTime()
+                    }
+                });
+
+                socket.on('connect', function() {
+                    console.log("Conectado al servidor WebSocket con ID:", socket.id);
+                    console.log("Tipo de transporte activo:", socket.io.engine.transport.name);
+                    
+                    setTimeout(function() {
+                        console.log("Enviando solicitud join_channel para canal:", channel_id);
+                        socket.emit('join_channel', { channel_id: channel_id }, function(response) {
+                            console.log("Respuesta de join_channel:", response);
+                            if (response && response.success) {
+                                console.log("Unido al canal exitosamente");
+                            } else {
+                                console.error("Error al unirse al canal:", response ? response.error : "Sin respuesta");
+                            }
+                        });
+                    }, 500);
+                });
+
+                socket.on('update', function(payload) {
+                    console.log("Datos recibidos del canal:", payload.channel_id);
+                    
+                    if (channel_id === payload.channel_id) {
+                        console.log("Procesando datos para el canal:", channel_id);
+                        updateChannelInfo(channel_id);
+                        
+                        if (payload.status) {
+                            updateStatusInfo(channel_id, payload);
+                        }
+                        
+                        if (payload.remaining_time) {
+                            updateRemainingTime(channel_id, payload);
+                        }
+                        
+                        if (payload.data) {
+                            updateTable(channel_id, payload);
+                        }
+                        
+                        if (payload.image) {
+                            const imgElement = document.getElementById('channelImage');
+                            imgElement.src = `data:image/jpeg;base64,${payload.image}`;
+                        }
+                    }
+                });
+
+                socket.on('connect_error', function(error) {
+                    console.error("Error de conexión:", error);
+                    console.error("Detalles del error:", {
+                        name: error.name,
+                        message: error.message,
+                        description: error.description
+                    });
+                });
+            } catch (error) {
+                console.error("Error al inicializar Socket.IO:", error);
+            }
+        }
+
+        function updateChannelInfo(channel_id) {
+            $('#channelInfo').text("Canal: " + channel_id);
+        }
+
+        function updateStatusInfo(channel_id, payload) {
+            if (channel_id === payload.channel_id) {
+                const status = payload.status;
+                $('#statusInfo').text("Estado: " + status);
+            }
+        }
+
+        function updateRemainingTime(channel_id, payload) {
+            if (channel_id === payload.channel_id) {
+                const time = payload.remaining_time;
+                $('#remainingTime').text("Tiempo restante: " + time);
+            }
+        }
+
+        function updateTable(channel_id, payload) {
+            $('#dataTable tbody').empty();
+            if (channel_id === payload.channel_id) {
+                const data = payload.data;
+                if (data && data.length > 0) {
+                    data.forEach(function(item) {
+                        const row = `<tr><td>${item.clase}</td><td>${item.cantidad}</td><td>${item.velocidad}</td></tr>`;
+                        $('#dataTable tbody').append(row);
+                    });
+                } 
+            }
+        }
+
+        $('#subscribeButton').click(function() {
+            const channel_id = $('#channelInput').val();
+            if (!channel_id) {
+                alert("Por favor ingresa el número de canal.");
+                return;
+            }
+            console.log("Suscribiéndose al canal:", channel_id);
+
+            connectWebSocket(channel_id);
+        });
+
+        $('#unsubscribeButton').click(function() {
+            const channel_id = $('#channelInput').val();
+            if (!channel_id) {
+                alert("Por favor ingresa el número de canal.");
+                return;
+            }
+            if (socket) {
+                socket.emit('leave_channel', { channel_id: channel_id }, function(ack) {
+                    console.log("Respuesta de leave_channel:", ack);
+                    
+                    $('#dataTable tbody').empty();
+                    $('#remainingTime').text("Tiempo restante: ");
+                    $('#channelInfo').text("Canal: ");
+                    $('#statusInfo').text("Estado: ");
+                    $('#channelImage').attr("src", "");
+                    
+                    socket.removeAllListeners();
+                    socket.disconnect();
+                    socket = null;
+                    
+                    console.log("Desuscripción exitosa y conexión cerrada.");
+                });
+            } else {
+                console.log("No hay conexión WebSocket activa.");
+            }
+        });
+    </script>
+</body>
+</html>

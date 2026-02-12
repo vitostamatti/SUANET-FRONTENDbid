@@ -1,0 +1,11 @@
+cluster-streaming #b8a616
+cluster-semaforos #a0a0a0
+cluster-camarasCGT #eff5eb
+cluster-lluvias  #da046d
+cluster-salvavidas #7b234b
+
+prioridad #2f4eff
+cluster-incidente #9b3042
+cluster-waze #0e808b
+cluster-irregularidades #00c4da
+cluster-pmt #f25244

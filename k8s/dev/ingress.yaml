@@ -1,0 +1,55 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: suanet-frontend-ingress
+  namespace: suanet-dev
+  annotations:
+    # Development environment: nginx ingress handles TLS termination
+    # Client → HTTPS → nginx ingress (terminates SSL) → HTTP → frontend service
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-buffer-size: "512k"
+    nginx.ingress.kubernetes.io/proxy-http-version: "1.1"
+    # ==== SECURITY: Rate Limiting ====
+    # Protección contra ataques de flood y DoS
+    # Límites por IP: 10 req/s, 300 req/min, 10 conexiones simultáneas
+    nginx.ingress.kubernetes.io/limit-rps: "10"
+    nginx.ingress.kubernetes.io/limit-rpm: "300"
+    nginx.ingress.kubernetes.io/limit-connections: "10"
+    # ==== SECURITY: IP Denylist ====
+    # IPs bloqueadas por actividad maliciosa confirmada
+    # Para agregar IPs: separar con comas (ej: "1.2.3.4/32,5.6.7.8/32")
+    nginx.ingress.kubernetes.io/denylist-source-range: "193.142.146.30/32"
+    # ==== SECURITY: Server Snippet ====
+    # Bloquea user-agents de scanners conocidos y rutas de ataque comunes
+    # NOTA: No bloquear /admin/ porque SUANET usa rutas /admin/users, /admin/roles, /admin/crossings
+    nginx.ingress.kubernetes.io/server-snippet: |
+      # Bloquear scanners de vulnerabilidades conocidos
+      if ($http_user_agent ~* (Dalfox|Nikto|sqlmap|nmap|masscan|ZmEu|paros|w3af|openvas|nessus|acunetix|AppScan|WebInspect)) {
+        return 403;
+      }
+      # Bloquear requests a rutas de CMS que no usamos (WordPress, PHP, etc.)
+      # IMPORTANTE: No incluir /admin/ - SUANET tiene rutas legitimas en /admin/*
+      if ($request_uri ~* ^.*(wp-admin|wp-login|wp-content|\.php|\.asp|\.aspx|\.env|\.git|/phpmyadmin|/myadmin|/mysql|/pma).*$) {
+        return 404;
+      }
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    - suanet-test.movilidadbogota.gov.co
+    secretName: suanet-tls-cert
+  rules:
+  - host: suanet-test.movilidadbogota.gov.co
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: suanet-frontend-service
+            port:
+              number: 80

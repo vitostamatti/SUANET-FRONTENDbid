@@ -1,0 +1,19 @@
+<svg width="32" height="32" viewBox="0 0 25 14" xmlns="http://www.w3.org/2000/svg">
+  <!-- Black outline -->
+  <rect x="2.37" y="0.58" width="16.46" height="12.34" rx="2" fill="none" stroke="black" stroke-width="1.4"/>
+  <polygon points="19.42,7 23.48,1.31 23.48,12.69" fill="none" stroke="black" stroke-width="1.4"/>
+  
+  <!-- Video camera icon -->
+  <rect x="2.47" y="0.78" width="16.46" height="12.34" rx="2" fill="#FFA500" stroke="#FF8C00" stroke-width="0.5"/>
+  <rect x="4.48" y="3.11" width="13" height="8" rx="1" fill="#FF8C00"/>
+  <circle cx="11.37" cy="7" r="2.81" fill="#FFB84D"/>
+  <circle cx="11.37" cy="7" r="1.87" fill="#FFA500"/>
+  <circle cx="11.37" cy="7" r="0.94" fill="#FF8C00"/>
+
+  <!-- Lens reflection -->
+  <ellipse cx="9.85" cy="5.45" rx="0.75" ry="0.56" fill="#FFEB3B" opacity="0.7"/>
+
+  <!-- Camera triangle -->
+  <polygon points="18.84,7 23.23,2.46 23.23,11.54" fill="#FFA500" stroke="#FF8C00" stroke-width="0.5"/>
+
+</svg>

@@ -1,0 +1,106 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: suanet-frontend-alerts
+  namespace: suanet-dev
+  labels:
+    app: suanet-frontend
+spec:
+  groups:
+  - name: suanet-frontend.rules
+    rules:
+    # Memory usage alert - prevent OOMKilled
+    - alert: SUANETFrontendHighMemoryUsage
+      expr: |
+        (
+          container_memory_working_set_bytes{namespace="suanet-dev", pod=~"suanet-frontend-deployment-.*"}
+          / container_spec_memory_limit_bytes{namespace="suanet-dev", pod=~"suanet-frontend-deployment-.*"}
+        ) > 0.85
+      for: 2m
+      labels:
+        severity: warning
+        service: suanet-frontend
+      annotations:
+        summary: "SUANET Frontend high memory usage"
+        description: "Pod {{ $labels.pod }} memory usage is above 85% for more than 2 minutes. Current usage: {{ $value | humanizePercentage }}"
+    
+    # Critical memory usage - approaching OOMKill
+    - alert: SUANETFrontendCriticalMemoryUsage
+      expr: |
+        (
+          container_memory_working_set_bytes{namespace="suanet-dev", pod=~"suanet-frontend-deployment-.*"}
+          / container_spec_memory_limit_bytes{namespace="suanet-dev", pod=~"suanet-frontend-deployment-.*"}
+        ) > 0.95
+      for: 30s
+      labels:
+        severity: critical
+        service: suanet-frontend
+      annotations:
+        summary: "SUANET Frontend critical memory usage - OOMKill imminent"
+        description: "Pod {{ $labels.pod }} memory usage is above 95%. Immediate action required to prevent OOMKill. Current usage: {{ $value | humanizePercentage }}"
+    
+    # High CPU usage
+    - alert: SUANETFrontendHighCPUUsage
+      expr: |
+        (
+          rate(container_cpu_usage_seconds_total{namespace="suanet-dev", pod=~"suanet-frontend-deployment-.*"}[5m])
+          / container_spec_cpu_quota{namespace="suanet-dev", pod=~"suanet-frontend-deployment-.*"} * container_spec_cpu_period{namespace="suanet-dev", pod=~"suanet-frontend-deployment-.*"}
+        ) > 0.8
+      for: 5m
+      labels:
+        severity: warning
+        service: suanet-frontend
+      annotations:
+        summary: "SUANET Frontend high CPU usage"
+        description: "Pod {{ $labels.pod }} CPU usage is above 80% for more than 5 minutes. Current usage: {{ $value | humanizePercentage }}"
+    
+    # Pod restarts
+    - alert: SUANETFrontendPodRestarting
+      expr: |
+        increase(kube_pod_container_status_restarts_total{namespace="suanet-dev", pod=~"suanet-frontend-deployment-.*"}[1h]) > 0
+      for: 0m
+      labels:
+        severity: warning
+        service: suanet-frontend
+      annotations:
+        summary: "SUANET Frontend pod restarting"
+        description: "Pod {{ $labels.pod }} has restarted {{ $value }} times in the last hour. Check logs for issues."
+    
+    # Pod not ready
+    - alert: SUANETFrontendPodNotReady
+      expr: |
+        kube_pod_status_ready{namespace="suanet-dev", pod=~"suanet-frontend-deployment-.*", condition="false"} == 1
+      for: 2m
+      labels:
+        severity: critical
+        service: suanet-frontend
+      annotations:
+        summary: "SUANET Frontend pod not ready"
+        description: "Pod {{ $labels.pod }} has been not ready for more than 2 minutes."
+    
+    # Health check failures
+    - alert: SUANETFrontendHealthCheckFailing
+      expr: |
+        up{job="suanet-frontend-monitor"} == 0
+      for: 1m
+      labels:
+        severity: critical
+        service: suanet-frontend
+      annotations:
+        summary: "SUANET Frontend health check failing"
+        description: "Health check endpoint is failing for more than 1 minute."
+    
+    # Deployment replica mismatch
+    - alert: SUANETFrontendDeploymentReplicaMismatch
+      expr: |
+        (
+          kube_deployment_spec_replicas{namespace="suanet-dev", deployment="suanet-frontend-deployment"}
+          != kube_deployment_status_replicas_available{namespace="suanet-dev", deployment="suanet-frontend-deployment"}
+        )
+      for: 5m
+      labels:
+        severity: warning
+        service: suanet-frontend
+      annotations:
+        summary: "SUANET Frontend deployment replica mismatch"
+        description: "Deployment {{ $labels.deployment }} has {{ $value }} replicas available, but {{ $labels.spec_replicas }} expected."

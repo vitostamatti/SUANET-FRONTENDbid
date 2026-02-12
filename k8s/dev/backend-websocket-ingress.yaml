@@ -1,0 +1,35 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: suanet-backend-websocket-ingress
+  namespace: suanet-dev
+  annotations:
+    # cert-manager.io/cluster-issuer: "letsencrypt-dev"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/proxy-buffer-size: "512k"
+    nginx.ingress.kubernetes.io/websocket-services: "suanet-backend-service"
+    nginx.ingress.kubernetes.io/proxy-http-version: "1.1"
+    # No usar connection-proxy-header (ya que genera un error)
+    nginx.ingress.kubernetes.io/upstream-hash-by: "$binary_remote_addr"
+    nginx.ingress.kubernetes.io/affinity: "cookie"
+    nginx.ingress.kubernetes.io/session-cookie-name: "socketio"
+    nginx.ingress.kubernetes.io/session-cookie-max-age: "172800"
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    - suanet-test.movilidadbogota.gov.co
+    secretName: suanet-tls-cert
+  rules:
+  - host: suanet-test.movilidadbogota.gov.co
+    http:
+      paths:
+      - path: /socket.io
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: suanet-backend-service
+            port:
+              number: 8080

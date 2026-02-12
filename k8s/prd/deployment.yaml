@@ -1,0 +1,99 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: suanet-frontend
+  namespace: suanet-prd
+  labels:
+    app: suanet-frontend
+    environment: prd
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: suanet-frontend
+  template:
+    metadata:
+      labels:
+        app: suanet-frontend
+        version: "1.0"  # Auto-updated to 1.{BuildId}
+    spec:
+      # Node affinity to run on nodepool2 (dedicated user node pool for SUANET)
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: agentpool
+                operator: In
+                values:
+                - nodepool2
+
+      tolerations:
+      - key: "workload"
+        operator: "Equal"
+        value: "applications"
+        effect: "NoSchedule"
+
+      # ACR authentication
+      imagePullSecrets:
+      - name: acr-secret
+
+      securityContext:
+        runAsUser: 10001
+        runAsGroup: 10001
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: suanet-frontend
+        image: acrsuanetatulaaprd.azurecr.io/suanet-frontend-prd:latest
+        ports:
+        - containerPort: 3000
+          name: http
+        securityContext:
+          capabilities:
+            drop:
+            - ALL
+            add:
+            - NET_BIND_SERVICE
+          runAsUser: 10001
+          runAsGroup: 10001
+          runAsNonRoot: true
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false  # Next.js necesita escribir en .next durante runtime
+        volumeMounts:
+        - name: tmp-volume
+          mountPath: /tmp
+        envFrom:
+        - secretRef:
+            name: suanet-frontend-secret
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "200m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+        # Health checks
+        # ==== SECURITY: Liveness probe ajustado para mayor tolerancia bajo carga ====
+        # Cambios (2026-01-09): failureThreshold 3→5, periodSeconds 30→15, timeoutSeconds 5→10
+        # Motivo: Evitar reinicios innecesarios durante picos de tráfico o ataques DoS
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 30
+          periodSeconds: 15        # Verificación más frecuente
+          timeoutSeconds: 10       # Más tolerancia bajo carga
+          failureThreshold: 5      # Más intentos antes de reiniciar
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 3
+          failureThreshold: 3
+      volumes:
+      - name: tmp-volume
+        emptyDir: {}

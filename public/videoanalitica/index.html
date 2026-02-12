@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Videoanalítica</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.6.1/socket.io.min.js"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+</head>
+<body>
+    <h1>Actualizaciones en tiempo real videoanalitica</h1>
+    <label for="channelInput">Número de Canal:</label>
+    <input type="text" id="channelInput" placeholder="Ej: 89">
+    <button id="subscribeButton">Subscribe</button>
+    <button id="unsubscribeButton">Unsubscribe</button>
+    <br><br>
+
+    <div id="channelInfo">Canal: </div>
+    <div id="statusInfo">Estado: </div>
+    <div id="remainingTime">Tiempo restante: </div>
+    <br>
+    <img id="channelImage" src="" alt="Imagen del canal" style="max-width: 100%; height: auto;">
+    <br>
+    <table border="1" id="dataTable">
+        <thead>
+            <tr>
+                <th>Clase</th>
+                <th>Cantidad</th>
+                <th>Velocidad</th>
+            </tr>
+        </thead>
+        <tbody>
+        </tbody>
+    </table>
+
+    <script>
+        let socket = null;
+        const backendURL = ""; // ← Reemplaza esto
+
+        function connectWebSocket(channel_id) {
+            console.log("Conectando al WebSocket con canal:", channel_id);
+            // Si ya hay un socket activo, lo cerramos
+            if (socket) {
+                socket.disconnect();
+            }
+            // Conectar al servidor WebSocket
+            socket = io(backendURL, {
+                path: "/socket.io",
+                transports: ['websocket', 'polling'],
+            });
+
+            socket.on('connect', function() {
+                console.log("Conectado al WebSocket.");
+                // Unirse a la sala del canal y activar el stream desde el servidor
+                socket.emit('join_channel', { channel_id: channel_id }, function(response) {
+                    if (response && response.success) {
+                        console.log(`Unido al canal ${channel_id}:`, response.message);
+                    } else {
+                        console.error("Error al unirse al canal:", response ? response.error : "No response");
+                    }
+                });
+            });
+
+            socket.on('update', function(payload) {
+                console.log("Datos recibidos:", payload);
+                if (channel_id === payload.channel_id){
+                    // Actualizar el canal
+                    if (payload.channel_id) {
+                        updateChannelInfo(channel_id);
+                    }
+                    // Actualizar el estado
+                    if (payload.status) {
+                        updateStatusInfo(channel_id, payload);
+                    }
+                    // Actualizar el tiempo restante
+                    if (payload.remaining_time) {
+                        updateRemainingTime(channel_id, payload);
+                    }
+                    if(payload.data){
+                        updateTable(channel_id, payload);
+                    }
+
+                    // Mostrar la imagen
+                    if (payload.image) {
+                        const imgElement = document.getElementById('channelImage');
+                        imgElement.src = `data:image/jpeg;base64,${payload.image}`;
+                    }
+                }
+            });
+
+            socket.on('disconnect', function() {
+                console.log("WebSocket desconectado.");
+            });
+            socket.on('connect_error', function(error) {
+                console.error("Error de conexión:", error);
+                alert("Error de conexión al servidor. Por favor, verifica tu conexión.");
+            });
+            socket.on('connect_timeout', function(timeout) {
+                console.error("Tiempo de conexión agotado:", timeout);
+                alert("Tiempo de conexión agotado. Por favor, intenta nuevamente.");
+            });
+            socket.on('reconnect_attempt', function(attempt) {
+                console.log("Intentando reconectar:", attempt);
+            });
+            socket.on('reconnect', function(attempt) {
+                console.log("Reconectado:", attempt);
+            });
+            socket.on('reconnect_error', function(error) {
+                console.error("Error al reconectar:", error);
+                alert("Error al reconectar. Por favor, verifica tu conexión.");
+            });
+            socket.on('reconnect_failed', function() {
+                console.error("Reconexión fallida.");
+                alert("Reconexión fallida. Por favor, verifica tu conexión.");
+            });
+            socket.on('ping', function() {
+                console.log("Ping recibido.");
+            });
+            socket.on('pong', function() {
+                console.log("Pong recibido.");
+            });
+            socket.on('disconnect', function() {
+                console.log("WebSocket desconectado.");
+            });
+        }
+
+        function updateChannelInfo(channel_id) {
+            $('#channelInfo').text("Canal: " + channel_id);
+        }
+
+        function updateStatusInfo(channel_id, payload) {
+            if (channel_id === payload.channel_id) {
+                const status = payload.status;
+                $('#statusInfo').text("Estado: " + status);
+            }
+        }
+
+        function updateRemainingTime(channel_id, payload) {
+            if (channel_id === payload.channel_id) {
+                const time = payload.remaining_time;
+                $('#remainingTime').text("Tiempo restante: " + time);
+            }
+        }
+
+        function updateTable(channel_id, payload) {
+            $('#dataTable tbody').empty();
+            if (channel_id === payload.channel_id) {
+                const data = payload.data;
+                if (data && data.length > 0) {
+                    data.forEach(function(item) {
+                        const row = `<tr><td>${item.clase}</td><td>${item.cantidad}</td><td>${item.velocidad}</td></tr>`;
+                        $('#dataTable tbody').append(row);
+                    });
+                } 
+            }
+        }
+
+        $('#subscribeButton').click(function() {
+            const channel_id = $('#channelInput').val();
+            if (!channel_id) {
+                alert("Por favor ingresa el número de canal.");
+                return;
+            }
+            console.log("Suscribiéndose al canal:", channel_id);
+
+            // Conectar al WebSocket
+            connectWebSocket(channel_id);
+        });
+
+        $('#unsubscribeButton').click(function() {
+            const channel_id = $('#channelInput').val();
+            if (!channel_id) {
+                alert("Por favor ingresa el número de canal.");
+                return;
+            }
+            if (socket) {
+                // Emitir el evento para salir de la sala y detener el hilo
+                socket.emit('leave_channel', { channel_id: channel_id });
+                
+                // Desconectar el WebSocket
+                socket.disconnect();
+                socket = null;
+                console.log("Desuscripción exitosa.");
+                $('#dataTable tbody').empty();
+                $('#remainingTime').text("Tiempo restante: ");
+                $('#channelInfo').text("Canal: ");
+                $('#statusInfo').text("Estado: ");
+                $('#channelImage').attr("src", "");
+            } else {
+                console.log("No hay conexión WebSocket activa.");
+            }
+        });
+    </script>
+</body>
+</html>

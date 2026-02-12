@@ -1,0 +1,228 @@
+# Starter pipeline
+# Start with a minimal pipeline that you can customize to build and deploy your code.
+# Add steps that build, run tests, deploy, and more:
+# https://aka.ms/yaml
+
+trigger:
+  branches:
+    include:
+      - dev
+
+pr: none
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+- group: suanet-frontend-secrets-dev
+- name: azureSubscription
+  value: 'SCSuanetDev'
+- name: resourceGroupName
+  value: 'RG-SDM-SUANET-DEV'
+- name: aksName
+  value: 'aks-suanet-atulaa-dev'
+- name: location
+  value: 'eastus'
+
+steps:
+- task: AzureCLI@2
+  displayName: 'Get AKS Credentials'
+  inputs:
+    azureSubscription: $(azureSubscription)
+    scriptType: 'bash'
+    scriptLocation: 'inlineScript'
+    inlineScript: |
+      # Get the AKS credentials
+      az aks get-credentials --resource-group $(resourceGroupName) --name $(aksName) --admin
+      # login to the ACR
+      az acr login --name crsuanetsdmdev
+
+# - script: |
+#     echo $(NEXT_PUBLIC_GOOGLE_MAPS_API_KEY)
+#     echo $(NEXTAUTH_SECRET)
+#   displayName: 'Show secrets (Dont do this in production)'
+
+- script: |
+    echo "Generating .env.local and frontend-env files..."
+    echo "NEXT_PUBLIC_FRONTEND_URL=$(NEXT_PUBLIC_FRONTEND_URL)" > .env.local
+    echo "NEXT_PUBLIC_BACKEND_URL=$(NEXT_PUBLIC_BACKEND_URL)" >> .env.local
+    echo "BACKEND_URL=$(BACKEND_URL)" >> .env.local
+    echo "NODE_ENV=$(NODE_ENV)" >> .env.local
+    echo "NEXTAUTH_SECRET=$(NEXTAUTH_SECRET)" >> .env.local
+    echo "NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=$(NEXT_PUBLIC_GOOGLE_MAPS_API_KEY)" >> .env.local
+    echo "NEXT_PUBLIC_GOOGLE_CLIENT_ID=$(NEXT_PUBLIC_GOOGLE_CLIENT_ID)" >> .env.local
+    echo "NEXT_PUBLIC_POWERBI_DESCRIPTIVO_URL=$(NEXT_PUBLIC_POWERBI_DESCRIPTIVO_URL)" >> .env.local
+    echo "NEXT_PUBLIC_POWERBI_TRAFICO_URL=$(NEXT_PUBLIC_POWERBI_TRAFICO_URL)" >> .env.local
+    cat .env.local
+    cat .env.local | grep -v '^#' | grep -v '^$' > frontend-env
+  displayName: 'Generate .env.local and frontend-env to build and run'
+
+- script: |
+    # Generar tag automático con formato: 1.YYYYMMDD.BuildId
+    # Ejemplo: 1.20251107.55368
+    DATE_TAG=$(date +%Y%m%d)
+    BUILD_ID=$(Build.BuildId)
+    IMAGE_TAG="1.${DATE_TAG}.${BUILD_ID}"
+    VERSION_LABEL="1.${BUILD_ID}"
+
+    echo "=========================================="
+    echo "Auto-generated Version for DEVELOPMENT"
+    echo "=========================================="
+    echo "Build ID:      $BUILD_ID"
+    echo "Date:          $DATE_TAG"
+    echo ""
+    echo "Generated Tags:"
+    echo "Image Tag:     $IMAGE_TAG"
+    echo "Version Label: $VERSION_LABEL"
+    echo ""
+    echo "Environment:   dev"
+    echo "ACR:           crsuanetsdmdev"
+    echo "Repository:    suanet-frontend-dev"
+    echo "=========================================="
+
+    # Exportar variables para siguiente step
+    echo "##vso[task.setvariable variable=imageTag]$IMAGE_TAG"
+    echo "##vso[task.setvariable variable=versionLabel]$VERSION_LABEL"
+  displayName: 'Generate Version Tag'
+
+- script: |
+    set -e  # Exit immediately if any command fails
+    IMAGE_TAG="$(imageTag)"
+
+    echo "=========================================="
+    echo "Building Docker Image"
+    echo "=========================================="
+    echo "Image tag: $IMAGE_TAG"
+    echo "Build args will be passed from variable group"
+    echo "=========================================="
+
+    docker buildx build \
+      --platform linux/amd64 \
+      --load \
+      --build-arg APP_VERSION="$IMAGE_TAG" \
+      --build-arg NEXT_PUBLIC_BACKEND_URL="$(NEXT_PUBLIC_BACKEND_URL)" \
+      --build-arg NEXT_PUBLIC_FRONTEND_URL="$(NEXT_PUBLIC_FRONTEND_URL)" \
+      --build-arg NEXT_PUBLIC_GOOGLE_CLIENT_ID="$(NEXT_PUBLIC_GOOGLE_CLIENT_ID)" \
+      --build-arg NEXT_PUBLIC_GOOGLE_MAPS_API_KEY="$(NEXT_PUBLIC_GOOGLE_MAPS_API_KEY)" \
+      --build-arg NEXT_PUBLIC_POWERBI_DESCRIPTIVO_URL="$(NEXT_PUBLIC_POWERBI_DESCRIPTIVO_URL)" \
+      --build-arg NEXT_PUBLIC_POWERBI_TRAFICO_URL="$(NEXT_PUBLIC_POWERBI_TRAFICO_URL)" \
+      -t crsuanetsdmdev.azurecr.io/suanet-frontend-dev:$IMAGE_TAG \
+      -t crsuanetsdmdev.azurecr.io/suanet-frontend-dev:latest \
+      .
+
+    echo "✓ Docker image built successfully"
+  displayName: 'Build Docker Image'
+
+- script: |
+    set -e  # Exit immediately if any command fails
+    IMAGE_TAG="$(imageTag)"
+    echo "=========================================="
+    echo "Pushing Docker Image"
+    echo "=========================================="
+    echo "Pushing versioned tag: $IMAGE_TAG"
+    docker push crsuanetsdmdev.azurecr.io/suanet-frontend-dev:$IMAGE_TAG
+
+    echo "Pushing latest tag"
+    docker push crsuanetsdmdev.azurecr.io/suanet-frontend-dev:latest
+
+    echo "=========================================="
+    echo "✓ Docker images pushed successfully"
+    echo "=========================================="
+    echo "Versioned: crsuanetsdmdev.azurecr.io/suanet-frontend-dev:$IMAGE_TAG"
+    echo "Latest:    crsuanetsdmdev.azurecr.io/suanet-frontend-dev:latest"
+    echo "=========================================="
+  displayName: 'Push Docker Image'
+
+- task: AzureCLI@2
+  displayName: 'Apply Kubernetes Deployment'
+  inputs:
+    azureSubscription: $(azureSubscription)
+    scriptType: 'bash'
+    scriptLocation: 'inlineScript'
+    inlineScript: |
+      set -e  # Exit immediately if any command fails
+
+      # Setup ACR Secret
+      echo "=========================================="
+      echo "Setting up ACR Secret..."
+      echo "=========================================="
+      ACR_PASSWORD=$(az acr credential show -n crsuanetsdmdev --query "passwords[0].value" -o tsv)
+      kubectl delete secret acr-secret -n suanet-dev --ignore-not-found=true
+      kubectl create secret docker-registry acr-secret \
+        --docker-server=crsuanetsdmdev.azurecr.io \
+        --docker-username=crsuanetsdmdev \
+        --docker-password=$ACR_PASSWORD \
+        -n suanet-dev
+      echo "✓ ACR secret configured"
+      echo ""
+
+      # Verify image exists in ACR before deployment
+      echo "=========================================="
+      echo "Verifying image exists in ACR..."
+      echo "=========================================="
+      if ! az acr repository show-tags --name crsuanetsdmdev --repository suanet-frontend-dev --query "[?@=='$(imageTag)']" -o tsv | grep -q "$(imageTag)"; then
+        echo "❌ ERROR: Image $(imageTag) not found in ACR!"
+        echo "The Docker build or push may have failed."
+        exit 1
+      fi
+      echo "✓ Image $(imageTag) verified in ACR"
+      echo ""
+
+      # Apply the Kubernetes deployment
+      kubectl delete secret suanet-frontend-secret -n suanet-dev --ignore-not-found=true
+      kubectl create secret generic suanet-frontend-secret --from-env-file=frontend-env -n suanet-dev
+
+      echo "=========================================="
+      echo "Updating deployment.yaml with auto-generated version"
+      echo "=========================================="
+      echo "Image Tag:     $(imageTag)"
+      echo "Version Label: $(versionLabel)"
+      echo "=========================================="
+
+      # Actualizar deployment.yaml con la versión generada automáticamente
+      sed -i "s|image: crsuanetsdmdev.azurecr.io/suanet-frontend-dev:.*|image: crsuanetsdmdev.azurecr.io/suanet-frontend-dev:$(imageTag)|g" k8s/dev/deployment.yaml
+
+      # Actualizar el label de versión (si existe en el deployment)
+      sed -i "s|version: \".*\"  # Auto-updated|version: \"$(versionLabel)\"  # Auto-updated|g" k8s/dev/deployment.yaml
+
+      echo "Updated deployment.yaml:"
+      echo "---"
+      grep -A 2 "image: crsuanetsdmdev" k8s/dev/deployment.yaml || echo "Image line not found"
+      grep "version:" k8s/dev/deployment.yaml || echo "Version label not found"
+      echo "---"
+      echo ""
+
+      echo "=========================================="
+      echo "Deploying Kubernetes Resources..."
+      echo "=========================================="
+      echo "Deploying ingress (nginx handles TLS)..."
+      kubectl apply -f k8s/dev/ingress.yaml
+      echo "Deploying backend websocket ingress..."
+      kubectl apply -f k8s/dev/backend-websocket-ingress.yaml
+      echo "Deploying frontend application..."
+      kubectl apply -f k8s/dev/deployment.yaml
+
+      echo "Waiting for deployment to be ready..."
+      kubectl rollout status deployment/suanet-frontend -n suanet-dev --timeout=300s
+
+      echo ""
+      echo "=========================================="
+      echo "Deployment Status:"
+      echo "=========================================="
+      kubectl get pods -n suanet-dev -l app=suanet-frontend
+
+      echo ""
+      echo "============================================"
+      echo "✓ Deployment to DEVELOPMENT completed"
+      echo "============================================"
+      echo "Deployment:    suanet-frontend"
+      echo "Namespace:     suanet-dev"
+      echo "Environment:   Development"
+      echo "============================================"
+      echo "Version Information (Auto-generated):"
+      echo "============================================"
+      echo "Image Tag:     $(imageTag)"
+      echo "Version Label: $(versionLabel)"
+      echo "Build ID:      $(Build.BuildId)"
+      echo "Full Image:    crsuanetsdmdev.azurecr.io/suanet-frontend-dev:$(imageTag)"
+      echo "============================================"

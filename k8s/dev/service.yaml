@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: suanet-frontend-service
+  namespace: suanet-dev
+  labels:
+    app: suanet-frontend
+  annotations:
+    nginx.org/websocket-services: "true"
+spec:
+  type: ClusterIP
+  selector:
+    app: suanet-frontend
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 3000

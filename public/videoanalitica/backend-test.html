@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Prueba directa del backend WebSocket</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.6.1/socket.io.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        #log { height: 400px; overflow: auto; border: 1px solid #ccc; padding: 10px; background: #f5f5f5; }
+        .error { color: red; }
+        .success { color: green; }
+        .info { color: blue; }
+        button { margin: 5px; padding: 8px; }
+    </style>
+</head>
+<body>
+    <h1>Prueba directa de conexión Socket.IO al backend</h1>
+    <div>
+        <label for="backendUrl">URL del backend:</label>
+        <input type="text" id="backendUrl" value="https://suanet-test.movilidadbogota.gov.co" style="width: 350px;">
+    </div>
+    <div>
+        <label for="channelId">Canal ID:</label>
+        <input type="text" id="channelId" value="346">
+    </div>
+    <div>
+        <button id="connect">Conectar</button>
+        <button id="checkChannel">Verificar Canal</button>
+        <button id="joinChannel">Unirse al Canal</button>
+        <button id="leaveChannel">Salir del Canal</button>
+        <button id="disconnect">Desconectar</button>
+        <button id="clear">Limpiar Log</button>
+    </div>
+    <h3>Log de eventos:</h3>
+    <div id="log"></div>
+
+    <script>
+        let socket = null;
+        const log = document.getElementById('log');
+        
+        function addLog(message, type = 'info') {
+            const entry = document.createElement('div');
+            entry.className = type;
+            entry.textContent = `${new Date().toLocaleTimeString()}: ${message}`;
+            log.appendChild(entry);
+            log.scrollTop = log.scrollHeight;
+        }
+        
+        document.getElementById('connect').addEventListener('click', () => {
+            const backendUrl = document.getElementById('backendUrl').value;
+            
+            try {
+                addLog(`Conectando a ${backendUrl}...`);
+                
+                if (socket) {
+                    addLog('Cerrando conexión existente...', 'info');
+                    socket.disconnect();
+                    socket = null;
+                }
+                
+                socket = io(backendUrl, {
+                    path: '/socket.io',
+                    transports: ['polling', 'websocket'],
+                    reconnection: true,
+                    forceNew: true,
+                    timeout: 20000
+                });
+                
+                socket.on('connect', () => {
+                    addLog(`Conectado con ID: ${socket.id}`, 'success');
+                    addLog(`Transporte activo: ${socket.io.engine.transport.name}`, 'info');
+                });
+                
+                socket.on('disconnect', (reason) => {
+                    addLog(`Desconectado: ${reason}`, 'error');
+                });
+                
+                socket.on('connect_error', (error) => {
+                    addLog(`Error de conexión: ${error.message}`, 'error');
+                    console.error('Detalles del error:', error);
+                });
+                
+                socket.on('update', (data) => {
+                    addLog(`Recibida actualización: ${JSON.stringify(data)}`, 'success');
+                    console.log('Datos completos:', data);
+                });
+                
+                socket.onAny((event, ...args) => {
+                    addLog(`Evento recibido: ${event}`, 'info');
+                    console.log(`Datos del evento ${event}:`, args);
+                });
+                
+            } catch (error) {
+                addLog(`Error: ${error.message}`, 'error');
+            }
+        });
+        
+        document.getElementById('checkChannel').addEventListener('click', () => {
+            if (!socket || !socket.connected) {
+                addLog('No hay conexión activa', 'error');
+                return;
+            }
+            
+            const channelId = document.getElementById('channelId').value;
+            addLog(`Verificando canal ${channelId}...`);
+            
+            socket.emit('check_channel', { channel_id: channelId }, (response) => {
+                addLog(`Respuesta check_channel: ${JSON.stringify(response)}`, response?.joined ? 'success' : 'info');
+            });
+        });
+        
+        document.getElementById('joinChannel').addEventListener('click', () => {
+            if (!socket || !socket.connected) {
+                addLog('No hay conexión activa', 'error');
+                return;
+            }
+            
+            const channelId = document.getElementById('channelId').value;
+            addLog(`Uniéndose a canal ${channelId}...`);
+            
+            socket.emit('join_channel', { channel_id: channelId }, (response) => {
+                if (response && response.success) {
+                    addLog(`Unido con éxito a canal ${channelId}`, 'success');
+                } else {
+                    addLog(`Error al unirse: ${response?.error || 'Sin respuesta'}`, 'error');
+                }
+            });
+        });
+        
+        document.getElementById('leaveChannel').addEventListener('click', () => {
+            if (!socket || !socket.connected) {
+                addLog('No hay conexión activa', 'error');
+                return;
+            }
+            
+            const channelId = document.getElementById('channelId').value;
+            addLog(`Saliendo de canal ${channelId}...`);
+            
+            socket.emit('leave_channel', { channel_id: channelId }, (response) => {
+                addLog(`Respuesta leave_channel: ${JSON.stringify(response)}`, 'info');
+            });
+        });
+        
+        document.getElementById('disconnect').addEventListener('click', () => {
+            if (!socket) {
+                addLog('No hay conexión activa', 'error');
+                return;
+            }
+            
+            addLog('Desconectando...', 'info');
+            socket.disconnect();
+        });
+        
+        document.getElementById('clear').addEventListener('click', () => {
+            log.innerHTML = '';
+        });
+    </script>
+</body>
+</html>

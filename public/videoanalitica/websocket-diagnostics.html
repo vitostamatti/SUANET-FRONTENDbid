@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket Diagnostics</title>
+    <link rel="stylesheet" href="websocket-diagnostics.css">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com/ajax/libs/socket.io/; style-src 'self'; connect-src 'self' ws: wss:;">
+</head>
+<body>
+    <h1>WebSocket Diagnostic Tool</h1>
+    <div>
+        <label for="channelId">Canal ID:</label>
+        <input type="text" id="channelId" value="345">
+        <button id="connect">Conectar</button>
+        <button id="joinChannel">Unirse al Canal</button>
+        <button id="requestUpdate">Solicitar Update</button>
+        <button id="disconnect">Desconectar</button>
+        <button id="clear">Limpiar Log</button>
+    </div>
+    <h3>Log de eventos:</h3>
+    <div id="log"></div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.6.1/socket.io.min.js" integrity="sha512-EQVlFgp4W5pJE4kWJX3iXPZ3Io7a8RD1/ZcEcGFyVmVNpK+MF1h8/Jh/nI0XKD1ygLTZPWYl9UG6oN2vk8WBag==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <script src="websocket-diagnostics.js"></script>
+</body>
+</html>
