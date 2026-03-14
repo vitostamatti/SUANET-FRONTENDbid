@@ -40,6 +40,8 @@ interface ControlPanelProps {
   fuenteStreaming: string;
   opcListaAlertas: string;
   opcVel: string;
+  isPredictionWidgetVisible: boolean;
+  onTogglePredictionWidget: () => void;
   originsCount?: number;
 }
 
@@ -74,6 +76,8 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
   fuenteStreaming,
   opcListaAlertas,
   opcVel,
+  isPredictionWidgetVisible,
+  onTogglePredictionWidget,
   originsCount = 0,
 }) => {
   const [dataValue, setDataValue] = useState<number>(1);
@@ -198,6 +202,9 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
               valor6={"0"}
               idStreaming={dataIDstreaming}
               fuenteStreaming={fuenteStreaming}
+              opcVel={opcVel}
+              isPredictionWidgetVisible={isPredictionWidgetVisible}
+              onTogglePredictionWidget={onTogglePredictionWidget}
             />
           </div>
         </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import { formatTimeslotLabel } from "../../lib/prediction/prediction-formatters";
+import { PredictionAreaCombobox } from "./prediction-area-combobox";
 
 interface PredictionTimelinePanelProps {
   selectedPredictionRegion: string;
@@ -34,24 +35,15 @@ export function PredictionTimelinePanel({
   commitTimeslotChange,
 }: PredictionTimelinePanelProps) {
   return (
-    <div className="absolute bottom-5 left-1/2 z-[15] w-80 -translate-x-1/2 rounded-lg border border-slate-700/70 bg-slate-900/90 p-3 text-slate-100 shadow-xl backdrop-blur">
+    <div className="absolute bottom-5 right-5 z-[11] w-80 rounded-lg border border-slate-700/70 bg-slate-900/90 p-3 text-slate-100 shadow-xl backdrop-blur">
       <label className="mb-2 grid gap-1 text-[13px] font-semibold text-slate-100">
-        Región
-        <select
+        Filtro
+        <PredictionAreaCombobox
           value={selectedPredictionRegion}
-          onChange={(event) => onPredictionRegionChange(event.target.value)}
+          onChange={onPredictionRegionChange}
+          regions={predictionRegions}
           disabled={predictionRegions.length === 0}
-          className="h-8 rounded-md border border-slate-600 bg-slate-800 px-2 text-sm text-slate-100 outline-none transition focus:border-slate-400 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {predictionRegions.length === 0 && (
-            <option value="">No hay regiones disponibles</option>
-          )}
-          {predictionRegions.map((region) => (
-            <option key={region.areaId} value={region.areaId}>
-              {region.name}
-            </option>
-          ))}
-        </select>
+        />
       </label>
 
       <div className="mb-2 text-[13px] font-semibold text-slate-100">

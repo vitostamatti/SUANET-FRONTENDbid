@@ -145,6 +145,7 @@ export default function MapaGoogleMapsAlertVel({
   congestionDataAlta,
   congestionDataMedia,
   congestionDataBaja,
+  predictionWidgetVisible,
   predictionCongestionData,
   predictionRegions,
   selectedPredictionRegion,
@@ -3207,6 +3208,7 @@ export default function MapaGoogleMapsAlertVel({
         predictionPolylinesRef={predictionPolylinesRef}
         infoWindowRef={infoWindowRef}
         opcDropdownVel={opcDropdownVel}
+        predictionWidgetVisible={predictionWidgetVisible}
         predictionCongestionData={predictionCongestionData}
         predictionRegions={predictionRegions}
         selectedPredictionRegion={selectedPredictionRegion}

@@ -1,6 +1,6 @@
 "use client";
 
-import { MutableRefObject } from "react";
+import { MutableRefObject, useEffect, useRef } from "react";
 import { PredictionSegmentAnalyticsModal } from "./prediction-segment-analytics-modal";
 import { PredictionTimelinePanel } from "./prediction-timeline-panel";
 import { isPredictionLayerOption } from "../../lib/prediction/prediction-formatters";
@@ -20,6 +20,7 @@ export function PredictionFeatureController({
   infoWindowRef,
   opcDropdownVel,
   predictionCongestionData,
+  predictionWidgetVisible,
   predictionRegions,
   selectedPredictionRegion,
   onPredictionRegionChange,
@@ -30,6 +31,7 @@ export function PredictionFeatureController({
   predictionStepMinutes,
 }: PredictionFeatureControllerProps) {
   const isPredictionLayerActive = isPredictionLayerOption(opcDropdownVel);
+  const lastZoomedRegionRef = useRef("");
 
   const {
     selectedPredictionSegment,
@@ -62,9 +64,69 @@ export function PredictionFeatureController({
     onSegmentClick: setSelectedPredictionSegment,
   });
 
+  useEffect(() => {
+    if (!isPredictionLayerActive) {
+      lastZoomedRegionRef.current = "";
+      return;
+    }
+
+    if (
+      !selectedPredictionRegion ||
+      lastZoomedRegionRef.current === selectedPredictionRegion
+    ) {
+      return;
+    }
+
+    const mapInstance = mapInstanceRef.current;
+    if (
+      !mapInstance ||
+      !window.google ||
+      predictionCongestionData.length === 0
+    ) {
+      return;
+    }
+
+    const segmentsInRegion = predictionCongestionData.filter(
+      (segment) => segment.areaId === selectedPredictionRegion,
+    );
+
+    if (segmentsInRegion.length === 0) {
+      return;
+    }
+
+    const bounds = new window.google.maps.LatLngBounds();
+    let hasAtLeastOnePoint = false;
+
+    segmentsInRegion.forEach((segment) => {
+      segment.coordinates.forEach((coordinate) => {
+        const lng = Number(coordinate[0]);
+        const lat = Number(coordinate[1]);
+
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+          return;
+        }
+
+        bounds.extend({ lat, lng });
+        hasAtLeastOnePoint = true;
+      });
+    });
+
+    if (!hasAtLeastOnePoint) {
+      return;
+    }
+
+    mapInstance.fitBounds(bounds, 20);
+    lastZoomedRegionRef.current = selectedPredictionRegion;
+  }, [
+    isPredictionLayerActive,
+    mapInstanceRef,
+    predictionCongestionData,
+    selectedPredictionRegion,
+  ]);
+
   return (
     <>
-      {isPredictionLayerActive && (
+      {isPredictionLayerActive && predictionWidgetVisible && (
         <PredictionTimelinePanel
           selectedPredictionRegion={selectedPredictionRegion}
           onPredictionRegionChange={onPredictionRegionChange}

@@ -2,6 +2,7 @@ import { CongestionPredictionSegment } from "../../lib/prediction/congestion-pre
 
 export interface PredictionFeatureProps {
   opcDropdownVel: string;
+  predictionWidgetVisible: boolean;
   predictionCongestionData: CongestionPredictionSegment[];
   predictionRegions: Array<{ areaId: string; name: string }>;
   selectedPredictionRegion: string;

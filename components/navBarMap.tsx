@@ -139,6 +139,7 @@ export default function NavBarMap({ lat, lng, vistaTrafico }: navBarMapsProps) {
   const [selectedPredictionRegion, setSelectedPredictionRegion] = useState("");
   const [selectedPredictionTimeslot, setSelectedPredictionTimeslot] =
     useState("");
+  const [predictionWidgetVisible, setPredictionWidgetVisible] = useState(true);
   const [predictionCongestionData, setPredictionCongestionData] = useState<
     CongestionPredictionSegment[]
   >([]);
@@ -2197,6 +2198,7 @@ export default function NavBarMap({ lat, lng, vistaTrafico }: navBarMapsProps) {
           congestionDataAlta={congestionDataAlta}
           congestionDataMedia={congestionDataMedia}
           congestionDataBaja={congestionDataBaja}
+          predictionWidgetVisible={predictionWidgetVisible}
           predictionCongestionData={predictionCongestionData}
           predictionRegions={predictionRegions}
           selectedPredictionRegion={selectedPredictionRegion}
@@ -2249,6 +2251,10 @@ export default function NavBarMap({ lat, lng, vistaTrafico }: navBarMapsProps) {
         fuenteStreaming={fuenteStreaming}
         opcListaAlertas={vistaTrafico}
         opcVel={opcVel}
+        isPredictionWidgetVisible={predictionWidgetVisible}
+        onTogglePredictionWidget={() =>
+          setPredictionWidgetVisible((previous) => !previous)
+        }
         originsCount={originsData.length}
       />
     </div>
