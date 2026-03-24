@@ -9,13 +9,11 @@ import {
 
 interface UsePredictionSegmentHistoryParams {
   predictionTimeframes: string[];
-  selectedPredictionRegion: string;
   selectedPredictionSegment: CongestionPredictionSegment | null;
 }
 
 export const usePredictionSegmentHistory = ({
   predictionTimeframes,
-  selectedPredictionRegion,
   selectedPredictionSegment,
 }: UsePredictionSegmentHistoryParams) => {
   const [segmentHistoryData, setSegmentHistoryData] = useState<
@@ -44,7 +42,6 @@ export const usePredictionSegmentHistory = ({
         const historyResponse = await getCongestionPredictionSegmentHistory(
           "",
           selectedPredictionSegment.roadId,
-          selectedPredictionSegment.areaId || selectedPredictionRegion,
         );
 
         const historyByTimeslot = new Map(
@@ -121,11 +118,7 @@ export const usePredictionSegmentHistory = ({
     return () => {
       isCancelled = true;
     };
-  }, [
-    predictionTimeframes,
-    selectedPredictionRegion,
-    selectedPredictionSegment,
-  ]);
+  }, [predictionTimeframes, selectedPredictionSegment]);
 
   const resetSegmentHistory = useCallback(() => {
     setSegmentHistoryData([]);

@@ -18,6 +18,7 @@ import {
   getCongestionPredictionAreas,
   getCongestionPredictionsByRegionAndTime,
   getCongestionPredictionsMetadata,
+  getCongestionPredictionsTotalesByTime,
 } from "../lib/prediction/congestion-predictions-service";
 import { PredictionLoadingCorridor } from "./prediction/prediction-types";
 
@@ -111,6 +112,8 @@ interface navBarMapsProps {
 }
 
 export default function NavBarMap({ lat, lng, vistaTrafico }: navBarMapsProps) {
+  const MIN_PREDICTION_ENTRY_LOADING_MS = 2500;
+
   // Backend URL configuration
   const backendUrl =
     process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8080";
@@ -218,6 +221,10 @@ export default function NavBarMap({ lat, lng, vistaTrafico }: navBarMapsProps) {
   const [predictionNoDataMessage, setPredictionNoDataMessage] = useState("");
   const [predictionEntryLoading, setPredictionEntryLoading] = useState(false);
   const predictionRequestIdRef = useRef(0);
+  const predictionEntryLoadingSinceRef = useRef<number | null>(null);
+  const predictionEntryLoadingTimeoutRef = useRef<ReturnType<
+    typeof setTimeout
+  > | null>(null);
   const previousOpcVelRef = useRef(opcVel);
   const predictionDataCacheRef = useRef<
     Map<string, CongestionPredictionSegment[]>
@@ -229,9 +236,13 @@ export default function NavBarMap({ lat, lng, vistaTrafico }: navBarMapsProps) {
   );
 
   const buildPredictionNoDataMessage = useCallback(
-    (items: CongestionPredictionSegment[]) => {
+    (items: CongestionPredictionSegment[], hasSelectedArea: boolean) => {
       if (items.length === 0) {
-        return "No hay predicciones disponibles para el area y tiempo seleccionados.";
+        if (hasSelectedArea) {
+          return "No hay predicciones disponibles para el area y tiempo seleccionados.";
+        }
+
+        return "No hay predicciones disponibles para toda la ciudad en el tiempo seleccionado.";
       }
 
       return "";
@@ -257,6 +268,43 @@ export default function NavBarMap({ lat, lng, vistaTrafico }: navBarMapsProps) {
     },
     [buildPredictionCacheKey],
   );
+
+  const stopPredictionEntryLoadingWithMinimumDuration = useCallback(() => {
+    if (predictionEntryLoadingTimeoutRef.current) {
+      clearTimeout(predictionEntryLoadingTimeoutRef.current);
+      predictionEntryLoadingTimeoutRef.current = null;
+    }
+
+    const startedAt = predictionEntryLoadingSinceRef.current;
+    if (!startedAt) {
+      setPredictionEntryLoading(false);
+      return;
+    }
+
+    const elapsed = Date.now() - startedAt;
+    const remaining = Math.max(MIN_PREDICTION_ENTRY_LOADING_MS - elapsed, 0);
+
+    if (remaining === 0) {
+      predictionEntryLoadingSinceRef.current = null;
+      setPredictionEntryLoading(false);
+      return;
+    }
+
+    predictionEntryLoadingTimeoutRef.current = setTimeout(() => {
+      predictionEntryLoadingSinceRef.current = null;
+      predictionEntryLoadingTimeoutRef.current = null;
+      setPredictionEntryLoading(false);
+    }, remaining);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (predictionEntryLoadingTimeoutRef.current) {
+        clearTimeout(predictionEntryLoadingTimeoutRef.current);
+        predictionEntryLoadingTimeoutRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     let isCancelled = false;
@@ -307,6 +355,7 @@ export default function NavBarMap({ lat, lng, vistaTrafico }: navBarMapsProps) {
       });
 
       if (!areaType) {
+        setSelectedPredictionRegion("");
         return;
       }
 
@@ -337,6 +386,10 @@ export default function NavBarMap({ lat, lng, vistaTrafico }: navBarMapsProps) {
         }
         return areaId;
       });
+
+      if (!areaId) {
+        return;
+      }
 
       const selectedRegion = predictionRegions.find(
         (region) => region.areaId === areaId,
@@ -663,44 +716,13 @@ export default function NavBarMap({ lat, lng, vistaTrafico }: navBarMapsProps) {
 
         setPredictionReferenceTimeslot(safeReferenceTimeslot);
 
-        if (mergedRegions.length > 0) {
-          setSelectedPredictionRegion((previousRegion) => {
-            const hasPreviousRegion = mergedRegions.some(
-              (region) => region.areaId === previousRegion,
-            );
+        setSelectedPredictionRegion((previousRegion) => {
+          const hasPreviousRegion = mergedRegions.some(
+            (region) => region.areaId === previousRegion,
+          );
 
-            if (hasPreviousRegion) {
-              const previousType = mergedRegions.find(
-                (region) => region.areaId === previousRegion,
-              )?.areaType;
-              if (previousType) {
-                setSelectedPredictionAreaType(previousType);
-              }
-              return previousRegion;
-            }
-
-            const metadataDefaultRegion = metadata.regions[0]?.areaId;
-            if (
-              metadataDefaultRegion &&
-              mergedRegions.some(
-                (region) => region.areaId === metadataDefaultRegion,
-              )
-            ) {
-              const metadataDefaultType = mergedRegions.find(
-                (region) => region.areaId === metadataDefaultRegion,
-              )?.areaType;
-              if (metadataDefaultType) {
-                setSelectedPredictionAreaType(metadataDefaultType);
-              }
-              return metadataDefaultRegion;
-            }
-
-            if (mergedRegions[0].areaType) {
-              setSelectedPredictionAreaType(mergedRegions[0].areaType || "");
-            }
-            return mergedRegions[0].areaId;
-          });
-        }
+          return hasPreviousRegion ? previousRegion : "";
+        });
 
         if (metadata.timeframes.length > 0) {
           setSelectedPredictionTimeslot(safeReferenceTimeslot);
@@ -718,6 +740,10 @@ export default function NavBarMap({ lat, lng, vistaTrafico }: navBarMapsProps) {
 
   useEffect(() => {
     if (!selectedPredictionAreaType || predictionRegions.length === 0) {
+      return;
+    }
+
+    if (!selectedPredictionRegion) {
       return;
     }
 
@@ -745,7 +771,7 @@ export default function NavBarMap({ lat, lng, vistaTrafico }: navBarMapsProps) {
         return;
       }
 
-      if (!selectedPredictionRegion || !selectedPredictionTimeslot) {
+      if (!selectedPredictionTimeslot) {
         setPredictionCongestionData([]);
         setPredictionNoDataMessage("");
         return;
@@ -763,44 +789,56 @@ export default function NavBarMap({ lat, lng, vistaTrafico }: navBarMapsProps) {
 
       const requestId = predictionRequestIdRef.current + 1;
       predictionRequestIdRef.current = requestId;
+      const modeAreaId = selectedPredictionRegion || "citywide";
+      const hasSelectedArea = Boolean(selectedPredictionRegion);
 
       try {
-        const getItemsWithCache = async (areaId: string, timeslot: string) => {
+        const getItemsWithCache = async (
+          areaId: string,
+          timeslot: string,
+          isCitywide: boolean,
+        ) => {
           const key = buildPredictionCacheKey(areaId, timeslot);
           const cachedItems = predictionDataCacheRef.current.get(key);
           if (cachedItems) {
             return cachedItems;
           }
 
-          const response = await getCongestionPredictionsByRegionAndTime(
-            backendUrl,
-            areaId,
-            timeslot,
-          );
+          const response = isCitywide
+            ? await getCongestionPredictionsTotalesByTime(backendUrl, timeslot)
+            : await getCongestionPredictionsByRegionAndTime(
+                backendUrl,
+                areaId,
+                timeslot,
+              );
+
           const responseItems = response.items || [];
           setPredictionCacheEntry(areaId, timeslot, responseItems);
           return responseItems;
         };
 
         const cacheKey = buildPredictionCacheKey(
-          selectedPredictionRegion,
+          modeAreaId,
           selectedPredictionTimeslot,
         );
         const cached = predictionDataCacheRef.current.get(cacheKey);
 
         if (cached) {
           setPredictionCongestionData(cached);
-          setPredictionNoDataMessage(buildPredictionNoDataMessage(cached));
+          setPredictionNoDataMessage(
+            buildPredictionNoDataMessage(cached, hasSelectedArea),
+          );
           setPredictionLoading(false);
-          setPredictionEntryLoading(false);
+          stopPredictionEntryLoadingWithMinimumDuration();
           return;
         }
 
         setPredictionLoading(true);
 
         const items = await getItemsWithCache(
-          selectedPredictionRegion,
+          modeAreaId,
           selectedPredictionTimeslot,
+          !hasSelectedArea,
         );
 
         if (requestId !== predictionRequestIdRef.current) {
@@ -808,7 +846,9 @@ export default function NavBarMap({ lat, lng, vistaTrafico }: navBarMapsProps) {
         }
 
         setPredictionCongestionData(items);
-        setPredictionNoDataMessage(buildPredictionNoDataMessage(items));
+        setPredictionNoDataMessage(
+          buildPredictionNoDataMessage(items, hasSelectedArea),
+        );
       } catch (error) {
         if (requestId !== predictionRequestIdRef.current) {
           return;
@@ -822,7 +862,7 @@ export default function NavBarMap({ lat, lng, vistaTrafico }: navBarMapsProps) {
       } finally {
         if (requestId === predictionRequestIdRef.current) {
           setPredictionLoading(false);
-          setPredictionEntryLoading(false);
+          stopPredictionEntryLoadingWithMinimumDuration();
         }
       }
     };
@@ -846,7 +886,15 @@ export default function NavBarMap({ lat, lng, vistaTrafico }: navBarMapsProps) {
     const isPredictionsMode = opcVel === "PREDICCIONES_CONGESTION";
 
     if (!wasPredictionsMode && isPredictionsMode) {
+      if (predictionEntryLoadingTimeoutRef.current) {
+        clearTimeout(predictionEntryLoadingTimeoutRef.current);
+        predictionEntryLoadingTimeoutRef.current = null;
+      }
+
+      predictionEntryLoadingSinceRef.current = Date.now();
       setPredictionEntryLoading(true);
+      setSelectedPredictionAreaType("");
+      setSelectedPredictionRegion("");
       if (
         predictionReferenceTimeslot &&
         predictionTimeframes.includes(predictionReferenceTimeslot)
@@ -856,6 +904,12 @@ export default function NavBarMap({ lat, lng, vistaTrafico }: navBarMapsProps) {
         setSelectedPredictionTimeslot(predictionTimeframes[0]);
       }
     } else if (wasPredictionsMode && !isPredictionsMode) {
+      if (predictionEntryLoadingTimeoutRef.current) {
+        clearTimeout(predictionEntryLoadingTimeoutRef.current);
+        predictionEntryLoadingTimeoutRef.current = null;
+      }
+
+      predictionEntryLoadingSinceRef.current = null;
       setPredictionEntryLoading(false);
     }
 
@@ -863,9 +917,7 @@ export default function NavBarMap({ lat, lng, vistaTrafico }: navBarMapsProps) {
   }, [opcVel, predictionReferenceTimeslot, predictionTimeframes]);
 
   const predictionAnalysisLoading =
-    opcVel === "PREDICCIONES_CONGESTION" &&
-    predictionEntryLoading &&
-    predictionLoading;
+    opcVel === "PREDICCIONES_CONGESTION" && predictionEntryLoading;
   const predictionInteractionDisabled = predictionAnalysisLoading;
   const visiblePredictionCongestionData = predictionAnalysisLoading
     ? []

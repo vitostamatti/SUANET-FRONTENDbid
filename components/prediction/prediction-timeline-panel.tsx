@@ -176,7 +176,7 @@ export function PredictionTimelinePanel({
           onChange={onPredictionRegionChange}
           regions={regionsForSelectedType}
           selectedAreaType={selectedPredictionAreaType}
-          disabled={regionsForSelectedType.length === 0}
+          disabled={false}
         />
       </label>
 

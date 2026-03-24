@@ -8,7 +8,6 @@ import { usePredictionTimeline } from "./use-prediction-timeline";
 interface UsePredictionFeatureParams {
   isPredictionLayerActive: boolean;
   predictionTimeframes: string[];
-  selectedPredictionRegion: string;
   selectedPredictionTimeslot: string;
   onPredictionTimeslotChange: (timeslot: string) => void;
 }
@@ -16,7 +15,6 @@ interface UsePredictionFeatureParams {
 export const usePredictionFeature = ({
   isPredictionLayerActive,
   predictionTimeframes,
-  selectedPredictionRegion,
   selectedPredictionTimeslot,
   onPredictionTimeslotChange,
 }: UsePredictionFeatureParams) => {
@@ -30,7 +28,6 @@ export const usePredictionFeature = ({
     resetSegmentHistory,
   } = usePredictionSegmentHistory({
     predictionTimeframes,
-    selectedPredictionRegion,
     selectedPredictionSegment,
   });
 

@@ -58,7 +58,6 @@ export function PredictionFeatureController({
   } = usePredictionFeature({
     isPredictionLayerActive,
     predictionTimeframes,
-    selectedPredictionRegion,
     selectedPredictionTimeslot,
     onPredictionTimeslotChange,
   });

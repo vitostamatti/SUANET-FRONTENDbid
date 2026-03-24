@@ -29,6 +29,7 @@ interface PredictionAreaComboboxProps {
 }
 
 const MAX_VISIBLE_OPTIONS = 200;
+const ALL_AREAS_VALUE = "__all_areas__";
 
 export function PredictionAreaCombobox({
   value,
@@ -61,6 +62,8 @@ export function PredictionAreaCombobox({
     [filteredRegions],
   );
 
+  const isAllAreasSelected = value === "";
+
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
@@ -68,14 +71,16 @@ export function PredictionAreaCombobox({
           variant="outline"
           role="combobox"
           aria-expanded={open}
-          disabled={disabled || regions.length === 0}
+          disabled={disabled}
           className="h-8 w-full justify-between border-slate-600 bg-slate-800 px-2 text-sm font-normal text-slate-100 hover:bg-slate-700"
         >
-          {selectedRegion
-            ? `${selectedRegion.name}${selectedRegion.areaType ? ` (${selectedRegion.areaType.toUpperCase()})` : ""}`
-            : regions.length === 0
-              ? "No hay opciones disponibles"
-              : "Seleccionar filtro"}
+          {isAllAreasSelected
+            ? "Toda la ciudad"
+            : selectedRegion
+              ? `${selectedRegion.name}${selectedRegion.areaType ? ` (${selectedRegion.areaType.toUpperCase()})` : ""}`
+              : regions.length === 0
+                ? "No hay opciones disponibles"
+                : "Seleccionar filtro"}
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-60" />
         </Button>
       </PopoverTrigger>
@@ -92,6 +97,22 @@ export function PredictionAreaCombobox({
           <CommandList>
             <CommandEmpty>No se encontraron opciones.</CommandEmpty>
             <CommandGroup>
+              <CommandItem
+                value={ALL_AREAS_VALUE}
+                onSelect={() => {
+                  onChange("");
+                  setQuery("");
+                  setOpen(false);
+                }}
+              >
+                <Check
+                  className={cn(
+                    "mr-2 h-4 w-4",
+                    isAllAreasSelected ? "opacity-100" : "opacity-0",
+                  )}
+                />
+                Toda la ciudad
+              </CommandItem>
               {visibleRegions.map((region) => (
                 <CommandItem
                   key={region.areaId}
