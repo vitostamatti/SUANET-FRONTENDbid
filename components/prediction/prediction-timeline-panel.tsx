@@ -1,6 +1,20 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import { Check, ChevronsUpDown } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Command,
+  CommandGroup,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
 import { formatTimeslotLabel } from "../../lib/prediction/prediction-formatters";
 import { CongestionPredictionRegion } from "../../lib/prediction/congestion-predictions-service";
 import { PredictionAreaCombobox } from "./prediction-area-combobox";
@@ -24,6 +38,86 @@ interface PredictionTimelinePanelProps {
     event: React.ChangeEvent<HTMLInputElement>,
   ) => void;
   commitTimeslotChange: (index: number) => void;
+}
+
+interface PredictionAreaTypeSelectProps {
+  value: string;
+  onChange: (areaType: string) => void;
+  options: string[];
+}
+
+function PredictionAreaTypeSelect({
+  value,
+  onChange,
+  options,
+}: PredictionAreaTypeSelectProps) {
+  const [open, setOpen] = useState(false);
+  const ALL_VALUE = "__all__";
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className="h-8 w-full justify-between border-slate-600 bg-slate-800 px-2 text-sm font-normal text-slate-100 hover:bg-slate-700"
+        >
+          {value ? value.toUpperCase() : "Todos"}
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-60" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent
+        className="w-[--radix-popover-trigger-width] p-0"
+        align="start"
+      >
+        <Command>
+          <CommandList>
+            <CommandGroup>
+              <CommandItem
+                value={ALL_VALUE}
+                onSelect={() => {
+                  onChange("");
+                  setOpen(false);
+                }}
+              >
+                <Check
+                  className={cn(
+                    "mr-2 h-4 w-4",
+                    value === "" ? "opacity-100" : "opacity-0",
+                  )}
+                />
+                Todos
+              </CommandItem>
+              {options.map((type) => (
+                <CommandItem
+                  key={type}
+                  value={type}
+                  onSelect={(currentType) => {
+                    const selectedType =
+                      options.find(
+                        (option) => option.toLowerCase() === currentType,
+                      ) || type;
+
+                    onChange(selectedType);
+                    setOpen(false);
+                  }}
+                >
+                  <Check
+                    className={cn(
+                      "mr-2 h-4 w-4",
+                      value === type ? "opacity-100" : "opacity-0",
+                    )}
+                  />
+                  {type.toUpperCase()}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
 }
 
 export function PredictionTimelinePanel({
@@ -68,18 +162,11 @@ export function PredictionTimelinePanel({
     <div className="absolute bottom-5 right-5 z-[11] w-80 rounded-lg border border-slate-700/70 bg-slate-900/90 p-3 text-slate-100 shadow-xl backdrop-blur">
       <label className="mb-2 grid gap-1 text-[13px] font-semibold text-slate-100">
         Tipo de area
-        <select
+        <PredictionAreaTypeSelect
           value={selectedPredictionAreaType}
-          onChange={(event) => onPredictionAreaTypeChange(event.target.value)}
-          className="h-8 w-full rounded-md border border-slate-600 bg-slate-800 px-2 text-sm font-normal text-slate-100 outline-none focus:border-slate-400"
-        >
-          <option value="">Todos</option>
-          {areaTypes.map((type) => (
-            <option key={type} value={type}>
-              {type.toUpperCase()}
-            </option>
-          ))}
-        </select>
+          onChange={onPredictionAreaTypeChange}
+          options={areaTypes}
+        />
       </label>
 
       <label className="mb-2 grid gap-1 text-[13px] font-semibold text-slate-100">
