@@ -1,16 +1,22 @@
 "use client";
 
+import { useMemo } from "react";
 import { formatTimeslotLabel } from "../../lib/prediction/prediction-formatters";
+import { CongestionPredictionRegion } from "../../lib/prediction/congestion-predictions-service";
 import { PredictionAreaCombobox } from "./prediction-area-combobox";
 
 interface PredictionTimelinePanelProps {
   selectedPredictionRegion: string;
   onPredictionRegionChange: (areaId: string) => void;
-  predictionRegions: Array<{ areaId: string; name: string }>;
+  predictionRegions: CongestionPredictionRegion[];
+  selectedPredictionAreaType: string;
+  onPredictionAreaTypeChange: (areaType: string) => void;
   predictionStepMinutes: number;
   predictionTimeframes: string[];
   displayedTimeslotIndex: number;
   canControlTimeline: boolean;
+  predictionLoading: boolean;
+  predictionNoDataMessage: string;
   isPredictionPlaying: boolean;
   setIsPredictionPlaying: React.Dispatch<React.SetStateAction<boolean>>;
   moveTimeslot: (direction: -1 | 1) => void;
@@ -24,25 +30,66 @@ export function PredictionTimelinePanel({
   selectedPredictionRegion,
   onPredictionRegionChange,
   predictionRegions,
+  selectedPredictionAreaType,
+  onPredictionAreaTypeChange,
   predictionStepMinutes,
   predictionTimeframes,
   displayedTimeslotIndex,
   canControlTimeline,
+  predictionLoading,
+  predictionNoDataMessage,
   isPredictionPlaying,
   setIsPredictionPlaying,
   moveTimeslot,
   handleTimeslotRangeChange,
   commitTimeslotChange,
 }: PredictionTimelinePanelProps) {
+  const areaTypes = useMemo(() => {
+    return Array.from(
+      new Set(
+        predictionRegions.map((region) => region.areaType).filter(Boolean),
+      ),
+    )
+      .map((type) => String(type))
+      .sort((a, b) => a.localeCompare(b));
+  }, [predictionRegions]);
+
+  const regionsForSelectedType = useMemo(() => {
+    if (!selectedPredictionAreaType) {
+      return predictionRegions;
+    }
+
+    return predictionRegions.filter(
+      (region) => region.areaType === selectedPredictionAreaType,
+    );
+  }, [predictionRegions, selectedPredictionAreaType]);
+
   return (
     <div className="absolute bottom-5 right-5 z-[11] w-80 rounded-lg border border-slate-700/70 bg-slate-900/90 p-3 text-slate-100 shadow-xl backdrop-blur">
       <label className="mb-2 grid gap-1 text-[13px] font-semibold text-slate-100">
-        Filtro
+        Tipo de area
+        <select
+          value={selectedPredictionAreaType}
+          onChange={(event) => onPredictionAreaTypeChange(event.target.value)}
+          className="h-8 w-full rounded-md border border-slate-600 bg-slate-800 px-2 text-sm font-normal text-slate-100 outline-none focus:border-slate-400"
+        >
+          <option value="">Todos</option>
+          {areaTypes.map((type) => (
+            <option key={type} value={type}>
+              {type.toUpperCase()}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <label className="mb-2 grid gap-1 text-[13px] font-semibold text-slate-100">
+        Area
         <PredictionAreaCombobox
           value={selectedPredictionRegion}
           onChange={onPredictionRegionChange}
-          regions={predictionRegions}
-          disabled={predictionRegions.length === 0}
+          regions={regionsForSelectedType}
+          selectedAreaType={selectedPredictionAreaType}
+          disabled={regionsForSelectedType.length === 0}
         />
       </label>
 
@@ -113,6 +160,16 @@ export function PredictionTimelinePanel({
           predictionTimeframes[displayedTimeslotIndex] || "",
         )}
       </div>
+      {predictionLoading && (
+        <div className="mt-2 text-xs text-slate-300">
+          Cargando predicciones...
+        </div>
+      )}
+      {!predictionLoading && predictionNoDataMessage && (
+        <div className="mt-2 rounded border border-slate-600/80 bg-slate-800/80 p-2 text-xs text-slate-200">
+          {predictionNoDataMessage}
+        </div>
+      )}
     </div>
   );
 }

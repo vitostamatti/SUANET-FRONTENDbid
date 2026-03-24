@@ -147,6 +147,8 @@ export default function MapaGoogleMapsAlertVel({
   predictionWidgetVisible,
   predictionCongestionData,
   predictionRegions,
+  selectedPredictionAreaType,
+  onPredictionAreaTypeChange,
   selectedPredictionRegion,
   onPredictionRegionChange,
   predictionTimeframes,
@@ -158,6 +160,7 @@ export default function MapaGoogleMapsAlertVel({
   predictionAnalysisLoading,
   predictionInteractionDisabled,
   predictionLoadingCorridors,
+  predictionNoDataMessage,
   ubicacionesAlertas,
   onChangeActualizar,
   onChangeActualizarStreaming,
@@ -2156,7 +2159,7 @@ export default function MapaGoogleMapsAlertVel({
         if (opcDropdownVel === "PREDICCIONES_CONGESTION") {
           const specificsPrediction = document.createElement("div");
           specificsPrediction.classList.add("specifics");
-          specificsPrediction.textContent = `Predicted congestion level: ${feature.getProperty("level")} - Delay: ${feature.getProperty("delay")} seconds`;
+          specificsPrediction.textContent = `Predicted congestion level: ${feature.getProperty("level")}`;
           detailsDiv.appendChild(specificsPrediction);
         }
 
@@ -3217,6 +3220,8 @@ export default function MapaGoogleMapsAlertVel({
         predictionLoadingCorridors={predictionLoadingCorridors}
         predictionCongestionData={predictionCongestionData}
         predictionRegions={predictionRegions}
+        selectedPredictionAreaType={selectedPredictionAreaType}
+        onPredictionAreaTypeChange={onPredictionAreaTypeChange}
         selectedPredictionRegion={selectedPredictionRegion}
         onPredictionRegionChange={onPredictionRegionChange}
         predictionTimeframes={predictionTimeframes}
@@ -3224,6 +3229,7 @@ export default function MapaGoogleMapsAlertVel({
         selectedPredictionTimeslot={selectedPredictionTimeslot}
         onPredictionTimeslotChange={onPredictionTimeslotChange}
         predictionStepMinutes={predictionStepMinutes}
+        predictionNoDataMessage={predictionNoDataMessage}
       />
 
       {predictionAnalysisLoading && (

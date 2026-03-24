@@ -13,12 +13,76 @@ import Map from "./mapaGooglemapsAlertVel";
 import ControlPanel from "./control-panel";
 import { off } from "process";
 import {
-  CongestionPredictionCorridor,
   CongestionPredictionSegment,
-  getCongestionPredictionCorridors,
+  CongestionPredictionRegion,
+  getCongestionPredictionAreas,
   getCongestionPredictionsByRegionAndTime,
   getCongestionPredictionsMetadata,
 } from "../lib/prediction/congestion-predictions-service";
+import { PredictionLoadingCorridor } from "./prediction/prediction-types";
+
+const buildPredictionLoadingCorridors = (
+  payload: any,
+): PredictionLoadingCorridor[] => {
+  const features = Array.isArray(payload?.features) ? payload.features : [];
+
+  const normalizePath = (coordinates: any): [number, number][] => {
+    if (!Array.isArray(coordinates)) {
+      return [];
+    }
+
+    return coordinates
+      .map((point) => {
+        if (!Array.isArray(point) || point.length < 2) {
+          return null;
+        }
+
+        const lng = Number(point[0]);
+        const lat = Number(point[1]);
+
+        if (!Number.isFinite(lng) || !Number.isFinite(lat)) {
+          return null;
+        }
+
+        return [lng, lat] as [number, number];
+      })
+      .filter((point): point is [number, number] => point !== null);
+  };
+
+  return features
+    .map((feature: any, index: number) => {
+      const geometry = feature?.geometry;
+      const properties = feature?.properties || {};
+      let paths: [number, number][][] = [];
+
+      if (geometry?.type === "LineString") {
+        const path = normalizePath(geometry.coordinates);
+        if (path.length >= 2) {
+          paths = [path];
+        }
+      } else if (geometry?.type === "MultiLineString") {
+        paths = (geometry.coordinates || [])
+          .map((line: any) => normalizePath(line))
+          .filter((path: [number, number][]) => path.length >= 2);
+      }
+
+      if (paths.length === 0) {
+        return null;
+      }
+
+      return {
+        id: feature?.id ?? properties.FID ?? index,
+        fid: Number(properties.FID ?? index),
+        name: String(properties.CORREDOR || `Corredor ${index + 1}`),
+        paths,
+      };
+    })
+    .filter(
+      (
+        corridor: PredictionLoadingCorridor | null,
+      ): corridor is PredictionLoadingCorridor => corridor !== null,
+    );
+};
 
 declare global {
   interface Window {
@@ -130,13 +194,15 @@ export default function NavBarMap({ lat, lng, vistaTrafico }: navBarMapsProps) {
   const [opcCongestion, setOpcCongestion] = useState(0);
   const [opcPredictions, setOpcPredictions] = useState(0);
   const [predictionRegions, setPredictionRegions] = useState<
-    Array<{ areaId: string; name: string }>
+    CongestionPredictionRegion[]
   >([]);
   const [predictionTimeframes, setPredictionTimeframes] = useState<string[]>(
     [],
   );
   const [predictionStepMinutes, setPredictionStepMinutes] = useState(15);
   const [predictionReferenceTimeslot, setPredictionReferenceTimeslot] =
+    useState("");
+  const [selectedPredictionAreaType, setSelectedPredictionAreaType] =
     useState("");
   const [selectedPredictionRegion, setSelectedPredictionRegion] = useState("");
   const [selectedPredictionTimeslot, setSelectedPredictionTimeslot] =
@@ -146,17 +212,30 @@ export default function NavBarMap({ lat, lng, vistaTrafico }: navBarMapsProps) {
     CongestionPredictionSegment[]
   >([]);
   const [predictionLoading, setPredictionLoading] = useState(false);
-  const [predictionAnalysisLoading, setPredictionAnalysisLoading] =
-    useState(false);
   const [predictionLoadingCorridors, setPredictionLoadingCorridors] = useState<
-    CongestionPredictionCorridor[]
+    PredictionLoadingCorridor[]
   >([]);
+  const [predictionNoDataMessage, setPredictionNoDataMessage] = useState("");
+  const [predictionEntryLoading, setPredictionEntryLoading] = useState(false);
+  const predictionRequestIdRef = useRef(0);
+  const previousOpcVelRef = useRef(opcVel);
   const predictionDataCacheRef = useRef<
     Map<string, CongestionPredictionSegment[]>
   >(new globalThis.Map<string, CongestionPredictionSegment[]>());
 
   const buildPredictionCacheKey = useCallback(
     (areaId: string, timeslot: string) => `${areaId}|${timeslot}`,
+    [],
+  );
+
+  const buildPredictionNoDataMessage = useCallback(
+    (items: CongestionPredictionSegment[]) => {
+      if (items.length === 0) {
+        return "No hay predicciones disponibles para el area y tiempo seleccionados.";
+      }
+
+      return "";
+    },
     [],
   );
 
@@ -177,6 +256,100 @@ export default function NavBarMap({ lat, lng, vistaTrafico }: navBarMapsProps) {
       }
     },
     [buildPredictionCacheKey],
+  );
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    const loadPredictionCorridors = async () => {
+      try {
+        const response = await fetch("/corredores.geojson", {
+          method: "GET",
+          headers: {
+            Accept: "application/json",
+          },
+        });
+
+        if (!response.ok) {
+          throw new Error(
+            `Failed to load corredores.geojson: ${response.status}`,
+          );
+        }
+
+        const payload = await response.json();
+        if (!isCancelled) {
+          setPredictionLoadingCorridors(
+            buildPredictionLoadingCorridors(payload),
+          );
+        }
+      } catch (error) {
+        console.error("Error loading prediction corridors GeoJSON:", error);
+        if (!isCancelled) {
+          setPredictionLoadingCorridors([]);
+        }
+      }
+    };
+
+    loadPredictionCorridors();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, []);
+
+  const handlePredictionAreaTypeChange = useCallback(
+    (areaType: string) => {
+      setSelectedPredictionAreaType((previousType) => {
+        if (previousType === areaType) {
+          return previousType;
+        }
+        return areaType;
+      });
+
+      if (!areaType) {
+        return;
+      }
+
+      const regionsOfType = predictionRegions.filter(
+        (region) => region.areaType === areaType,
+      );
+
+      if (regionsOfType.length === 0) {
+        return;
+      }
+
+      const hasSelectedRegionInType = regionsOfType.some(
+        (region) => region.areaId === selectedPredictionRegion,
+      );
+
+      if (!hasSelectedRegionInType) {
+        setSelectedPredictionRegion(regionsOfType[0].areaId);
+      }
+    },
+    [predictionRegions, selectedPredictionRegion],
+  );
+
+  const handlePredictionRegionChange = useCallback(
+    (areaId: string) => {
+      setSelectedPredictionRegion((previousRegion) => {
+        if (previousRegion === areaId) {
+          return previousRegion;
+        }
+        return areaId;
+      });
+
+      const selectedRegion = predictionRegions.find(
+        (region) => region.areaId === areaId,
+      );
+
+      if (
+        selectedRegion?.areaType &&
+        selectedRegion.areaType !== selectedPredictionAreaType
+      ) {
+        setSelectedPredictionAreaType(selectedRegion.areaType);
+      }
+    },
+    [predictionRegions, selectedPredictionAreaType],
   );
   // Estado para controlar si la página está inactiva
   const [isInactive, setIsInactive] = useState(false);
@@ -403,30 +576,129 @@ export default function NavBarMap({ lat, lng, vistaTrafico }: navBarMapsProps) {
   useEffect(() => {
     const fetchPredictionMetadata = async () => {
       try {
-        const metadata = await getCongestionPredictionsMetadata("");
+        const [metadata, areaOptions] = await Promise.all([
+          getCongestionPredictionsMetadata(backendUrl),
+          getCongestionPredictionAreas(backendUrl).catch(() => []),
+        ]);
 
-        setPredictionRegions(metadata.regions);
+        const mergedRegions = (() => {
+          if (areaOptions.length === 0) {
+            return metadata.regions;
+          }
+
+          const metadataRegionById = new globalThis.Map(
+            metadata.regions.map((region) => [
+              region.areaId.toLowerCase(),
+              region,
+            ]),
+          );
+
+          const areaOptionById = new globalThis.Map(
+            areaOptions.map((region) => [region.areaId.toLowerCase(), region]),
+          );
+
+          const prioritizedRegions: CongestionPredictionRegion[] = [];
+          const usedIds = new globalThis.Set<string>();
+
+          metadata.regions.forEach((metadataRegion) => {
+            const key = metadataRegion.areaId.toLowerCase();
+            const matchingAreaOption = areaOptionById.get(key);
+
+            prioritizedRegions.push(
+              matchingAreaOption
+                ? {
+                    ...matchingAreaOption,
+                    // Keep canonical metadata naming where available.
+                    name: metadataRegion.name || matchingAreaOption.name,
+                  }
+                : {
+                    ...metadataRegion,
+                    areaType: metadataRegion.areaId.split(":")[0] || undefined,
+                  },
+            );
+
+            usedIds.add(key);
+          });
+
+          const remainingRegions = areaOptions
+            .filter((region) => !usedIds.has(region.areaId.toLowerCase()))
+            .sort((a, b) => {
+              const aInMetadata = metadataRegionById.has(a.areaId.toLowerCase())
+                ? 0
+                : 1;
+              const bInMetadata = metadataRegionById.has(b.areaId.toLowerCase())
+                ? 0
+                : 1;
+
+              if (aInMetadata !== bInMetadata) {
+                return aInMetadata - bInMetadata;
+              }
+
+              const byType = (a.areaType || "").localeCompare(
+                b.areaType || "",
+                "es",
+                { sensitivity: "base" },
+              );
+
+              if (byType !== 0) {
+                return byType;
+              }
+
+              return a.name.localeCompare(b.name, "es", {
+                sensitivity: "base",
+              });
+            });
+
+          return [...prioritizedRegions, ...remainingRegions];
+        })();
+
+        setPredictionRegions(mergedRegions);
         setPredictionTimeframes(metadata.timeframes);
         setPredictionStepMinutes(metadata.stepMinutes || 15);
         const safeReferenceTimeslot =
           metadata.referenceTimeslot &&
           metadata.timeframes.includes(metadata.referenceTimeslot)
             ? metadata.referenceTimeslot
-            : metadata.timeframes[metadata.timeframes.length - 1] || "";
+            : metadata.timeframes[0] || "";
 
         setPredictionReferenceTimeslot(safeReferenceTimeslot);
 
-        if (metadata.regions.length > 0) {
+        if (mergedRegions.length > 0) {
           setSelectedPredictionRegion((previousRegion) => {
-            const hasPreviousRegion = metadata.regions.some(
+            const hasPreviousRegion = mergedRegions.some(
               (region) => region.areaId === previousRegion,
             );
 
             if (hasPreviousRegion) {
+              const previousType = mergedRegions.find(
+                (region) => region.areaId === previousRegion,
+              )?.areaType;
+              if (previousType) {
+                setSelectedPredictionAreaType(previousType);
+              }
               return previousRegion;
             }
 
-            return metadata.regions[0].areaId;
+            const metadataDefaultRegion = metadata.regions[0]?.areaId;
+            if (
+              metadataDefaultRegion &&
+              mergedRegions.some(
+                (region) => region.areaId === metadataDefaultRegion,
+              )
+            ) {
+              const metadataDefaultType = mergedRegions.find(
+                (region) => region.areaId === metadataDefaultRegion,
+              )?.areaType;
+              if (metadataDefaultType) {
+                setSelectedPredictionAreaType(metadataDefaultType);
+              }
+              return metadataDefaultRegion;
+            }
+
+            if (mergedRegions[0].areaType) {
+              setSelectedPredictionAreaType(mergedRegions[0].areaType || "");
+            }
+            return mergedRegions[0].areaId;
           });
         }
 
@@ -434,7 +706,7 @@ export default function NavBarMap({ lat, lng, vistaTrafico }: navBarMapsProps) {
           setSelectedPredictionTimeslot(safeReferenceTimeslot);
         }
 
-        setOpcPredictions(metadata.regions.length > 0 ? 1 : 0);
+        setOpcPredictions(mergedRegions.length > 0 ? 1 : 0);
       } catch (error) {
         console.error("Error loading congestion prediction metadata:", error);
         setOpcPredictions(0);
@@ -445,56 +717,37 @@ export default function NavBarMap({ lat, lng, vistaTrafico }: navBarMapsProps) {
   }, [backendUrl]);
 
   useEffect(() => {
-    let isCancelled = false;
-
-    if (opcVel !== "PREDICCIONES_CONGESTION") {
-      setPredictionAnalysisLoading(false);
-      setPredictionLoadingCorridors([]);
-      return () => {
-        isCancelled = true;
-      };
+    if (!selectedPredictionAreaType || predictionRegions.length === 0) {
+      return;
     }
 
-    setPredictionAnalysisLoading(true);
+    const regionsOfType = predictionRegions.filter(
+      (region) => region.areaType === selectedPredictionAreaType,
+    );
 
-    const minimumDurationPromise = new Promise((resolve) => {
-      window.setTimeout(resolve, 3500);
-    });
+    if (regionsOfType.length === 0) {
+      return;
+    }
 
-    const corridorsPromise = getCongestionPredictionCorridors(backendUrl)
-      .catch(() => getCongestionPredictionCorridors(""))
-      .then((response) => {
-        if (!isCancelled) {
-          setPredictionLoadingCorridors(response.items || []);
-        }
-      })
-      .catch((error) => {
-        console.error("Error loading congestion corridors:", error);
-        if (!isCancelled) {
-          setPredictionLoadingCorridors([]);
-        }
-      });
+    const hasSelectedRegionInType = regionsOfType.some(
+      (region) => region.areaId === selectedPredictionRegion,
+    );
 
-    Promise.all([minimumDurationPromise, corridorsPromise]).finally(() => {
-      if (isCancelled) {
-        return;
-      }
-      setPredictionAnalysisLoading(false);
-    });
-
-    return () => {
-      isCancelled = true;
-    };
-  }, [backendUrl, opcVel]);
+    if (!hasSelectedRegionInType) {
+      setSelectedPredictionRegion(regionsOfType[0].areaId);
+    }
+  }, [predictionRegions, selectedPredictionAreaType, selectedPredictionRegion]);
 
   useEffect(() => {
     const fetchPredictionData = async () => {
       if (opcVel !== "PREDICCIONES_CONGESTION") {
+        setPredictionNoDataMessage("");
         return;
       }
 
       if (!selectedPredictionRegion || !selectedPredictionTimeslot) {
         setPredictionCongestionData([]);
+        setPredictionNoDataMessage("");
         return;
       }
 
@@ -508,7 +761,27 @@ export default function NavBarMap({ lat, lng, vistaTrafico }: navBarMapsProps) {
         return;
       }
 
+      const requestId = predictionRequestIdRef.current + 1;
+      predictionRequestIdRef.current = requestId;
+
       try {
+        const getItemsWithCache = async (areaId: string, timeslot: string) => {
+          const key = buildPredictionCacheKey(areaId, timeslot);
+          const cachedItems = predictionDataCacheRef.current.get(key);
+          if (cachedItems) {
+            return cachedItems;
+          }
+
+          const response = await getCongestionPredictionsByRegionAndTime(
+            backendUrl,
+            areaId,
+            timeslot,
+          );
+          const responseItems = response.items || [];
+          setPredictionCacheEntry(areaId, timeslot, responseItems);
+          return responseItems;
+        };
+
         const cacheKey = buildPredictionCacheKey(
           selectedPredictionRegion,
           selectedPredictionTimeslot,
@@ -517,66 +790,40 @@ export default function NavBarMap({ lat, lng, vistaTrafico }: navBarMapsProps) {
 
         if (cached) {
           setPredictionCongestionData(cached);
+          setPredictionNoDataMessage(buildPredictionNoDataMessage(cached));
           setPredictionLoading(false);
+          setPredictionEntryLoading(false);
           return;
         }
 
         setPredictionLoading(true);
 
-        const response = await getCongestionPredictionsByRegionAndTime(
-          "",
+        const items = await getItemsWithCache(
           selectedPredictionRegion,
           selectedPredictionTimeslot,
         );
 
-        const items = response.items || [];
+        if (requestId !== predictionRequestIdRef.current) {
+          return;
+        }
+
         setPredictionCongestionData(items);
-        setPredictionCacheEntry(
-          selectedPredictionRegion,
-          selectedPredictionTimeslot,
-          items,
-        );
-
-        const selectedIndex = predictionTimeframes.findIndex(
-          (timeslot) => timeslot === selectedPredictionTimeslot,
-        );
-
-        const neighborTimeslots = [
-          predictionTimeframes[selectedIndex - 1],
-          predictionTimeframes[selectedIndex + 1],
-        ].filter((timeslot): timeslot is string => Boolean(timeslot));
-
-        neighborTimeslots.forEach((timeslot) => {
-          const neighborKey = buildPredictionCacheKey(
-            selectedPredictionRegion,
-            timeslot,
-          );
-
-          if (predictionDataCacheRef.current.has(neighborKey)) {
-            return;
-          }
-
-          getCongestionPredictionsByRegionAndTime(
-            "",
-            selectedPredictionRegion,
-            timeslot,
-          )
-            .then((neighborResponse) => {
-              setPredictionCacheEntry(
-                selectedPredictionRegion,
-                timeslot,
-                neighborResponse.items || [],
-              );
-            })
-            .catch(() => {
-              // best effort prefetch
-            });
-        });
+        setPredictionNoDataMessage(buildPredictionNoDataMessage(items));
       } catch (error) {
+        if (requestId !== predictionRequestIdRef.current) {
+          return;
+        }
+
         console.error("Error loading congestion predictions:", error);
         setPredictionCongestionData([]);
+        setPredictionNoDataMessage(
+          "No se pudieron cargar las predicciones. Intenta de nuevo en unos minutos.",
+        );
       } finally {
-        setPredictionLoading(false);
+        if (requestId === predictionRequestIdRef.current) {
+          setPredictionLoading(false);
+          setPredictionEntryLoading(false);
+        }
       }
     };
 
@@ -589,11 +836,37 @@ export default function NavBarMap({ lat, lng, vistaTrafico }: navBarMapsProps) {
     predictionReferenceTimeslot,
     predictionTimeframes,
     buildPredictionCacheKey,
+    buildPredictionNoDataMessage,
     setPredictionCacheEntry,
   ]);
 
-  const predictionInteractionDisabled =
-    predictionAnalysisLoading || predictionLoading;
+  useEffect(() => {
+    const wasPredictionsMode =
+      previousOpcVelRef.current === "PREDICCIONES_CONGESTION";
+    const isPredictionsMode = opcVel === "PREDICCIONES_CONGESTION";
+
+    if (!wasPredictionsMode && isPredictionsMode) {
+      setPredictionEntryLoading(true);
+      if (
+        predictionReferenceTimeslot &&
+        predictionTimeframes.includes(predictionReferenceTimeslot)
+      ) {
+        setSelectedPredictionTimeslot(predictionReferenceTimeslot);
+      } else if (predictionTimeframes.length > 0) {
+        setSelectedPredictionTimeslot(predictionTimeframes[0]);
+      }
+    } else if (wasPredictionsMode && !isPredictionsMode) {
+      setPredictionEntryLoading(false);
+    }
+
+    previousOpcVelRef.current = opcVel;
+  }, [opcVel, predictionReferenceTimeslot, predictionTimeframes]);
+
+  const predictionAnalysisLoading =
+    opcVel === "PREDICCIONES_CONGESTION" &&
+    predictionEntryLoading &&
+    predictionLoading;
+  const predictionInteractionDisabled = predictionAnalysisLoading;
   const visiblePredictionCongestionData = predictionAnalysisLoading
     ? []
     : predictionCongestionData;
@@ -2261,13 +2534,16 @@ export default function NavBarMap({ lat, lng, vistaTrafico }: navBarMapsProps) {
           predictionLoadingCorridors={predictionLoadingCorridors}
           predictionCongestionData={visiblePredictionCongestionData}
           predictionRegions={predictionRegions}
+          selectedPredictionAreaType={selectedPredictionAreaType}
+          onPredictionAreaTypeChange={handlePredictionAreaTypeChange}
           selectedPredictionRegion={selectedPredictionRegion}
-          onPredictionRegionChange={setSelectedPredictionRegion}
+          onPredictionRegionChange={handlePredictionRegionChange}
           predictionTimeframes={predictionTimeframes}
           predictionReferenceTimeslot={predictionReferenceTimeslot}
           selectedPredictionTimeslot={selectedPredictionTimeslot}
           onPredictionTimeslotChange={setSelectedPredictionTimeslot}
           predictionStepMinutes={predictionStepMinutes}
+          predictionNoDataMessage={predictionNoDataMessage}
           ubicacionesAlertas={dataGeoAlertas}
           onChangeActualizar={handleActualizar}
           onChangeActualizarStreaming={handleActualizarStreaming}

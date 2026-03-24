@@ -1,14 +1,18 @@
-# Congestion Predictions API Specification (Production Contract)
+# Congestion Predictions API Specification (Live Backend Contract)
 
-This document defines the **real backend contract** required by this frontend for congestion predictions.
+This document describes the backend contract currently observed in live environments and consumed by this frontend.
 
-## Canonical Base Path (Production)
+## Verification Stamp
 
-- `/api/congestion/predictions/metadata`
-- `/api/congestion/predictions` ?areaId=12
-- `/api/congestions/predictions/area` // polygon
-- `/api/congestion/predictions/segment-history` ?segmentId=1212312
-- `/api/congestion/predictions/segment-future` ?segmentId=1212312
+- Verified on: 2026-03-16
+- Environment used: suanet-test
+- Base URL source: `NEXT_PUBLIC_BACKEND_URL`
+
+## Live Base Path
+
+- `/api/prediccion-congestion/metadata`
+- `/api/prediccion-congestion/predictions-areas?areaId={areaId}&timeslot={timeslot}`
+- `/api/prediccion-congestion/segment-history?roadId={roadId}[&areaId={areaId}]`
 
 ## Common Response Envelope
 
@@ -28,34 +32,37 @@ This document defines the **real backend contract** required by this frontend fo
 }
 ```
 
----
+## 1) GET `/api/prediccion-congestion/metadata`
 
-## 1) GET `/api/congestion/predictions/metadata`
-
-Returns timeline and region metadata.
+Returns available regions and slots plus backend metadata.
 
 ### Request
 
 - Method: `GET`
 - Query params: none
 
-### Response `200`
+### Response `200` (observed shape)
 
 ```json
 {
   "data": {
-    "generatedAt": "2026-02-28T12:30:00.000Z",
-    "stepMinutes": 15,
-    "referenceTimeslot": "2026-02-28T06:15:00.000Z",
-    "pastPeriods": 8,
-    "futurePeriods": 8,
+    "generatedAt": "2026-03-16T13:30:00",
+    "expectedFirstSlot": "2026-03-16T13:45:00",
+    "expectedLastSlot": "2026-03-17T02:00:00",
+    "availablePeriods": 31,
+    "emptyPeriods": 19,
     "regions": [
       {
-        "areaId": "1",
-        "name": "Region 1"
+        "areaId": "upl:UPL13",
+        "name": "Tintal"
       }
     ],
-    "timeframes": ["2026-02-28T06:00:00.000Z", "2026-02-28T06:15:00.000Z"]
+    "slots": [
+      {
+        "timeslot": "2026-03-16T13:45:00",
+        "hasHighCongestion": false
+      }
+    ]
   }
 }
 ```
@@ -68,11 +75,9 @@ Returns timeline and region metadata.
 }
 ```
 
----
+## 2) GET `/api/prediccion-congestion/predictions-areas`
 
-## 2) GET `/api/congestion/predictions`
-
-Returns all segment predictions for one region and one timeslot.
+Returns predicted segments for one `areaId` and one `timeslot`.
 
 ### Request
 
@@ -81,34 +86,34 @@ Returns all segment predictions for one region and one timeslot.
   - `areaId` (required, string)
   - `timeslot` (required, ISO datetime string)
 
-### Response `200`
+### Response `200` (observed field contract)
 
 ```json
 {
   "data": {
-    "generatedAt": "2026-02-28T12:30:00.000Z",
-    "timeslot": "2026-02-28T06:15:00.000Z",
-    "areaId": "1",
+    "generatedAt": "2026-03-16T13:30:00",
+    "timeslot": "2026-03-16T20:00:00",
+    "areaId": "upl:UPL13",
     "totalItems": 2,
     "items": [
       {
-        "mviCodigo": 1001,
-        "id": 1001,
-        "areaId": "1",
-        "title": "Segmento 1001",
-        "coordinates": [
-          [-74.1, 4.6],
-          [-74.09, 4.61]
-        ],
-        "velocity": 21.3,
-        "level": 2.8,
-        "delay": 31.0,
-        "day": "2026-02-28",
-        "hour": "06:15",
-        "timeslot": "2026-02-28T06:15:00.000Z"
+        "road_id": "1001_north",
+        "predicted_velocity": 21.3,
+        "predicted_level": 2.8,
+        "day": "2026-03-16",
+        "hour": "20:00",
+        "timeslot": "2026-03-16T20:00:00"
       }
     ]
   }
+}
+```
+
+### Response `404` (valid request, no data for that area/slot)
+
+```json
+{
+  "message": "No predictions found for areaId and timeslot"
 }
 ```
 
@@ -120,61 +125,63 @@ Returns all segment predictions for one region and one timeslot.
 }
 ```
 
-```json
-{
-  "message": "Invalid timeslot. Use one value from metadata.timeframes"
-}
-```
-
 ### Error `500`
 
 ```json
 {
-  "message": "Failed to process congestion prediction request"
+  "message": "Failed to process predictions request"
 }
 ```
 
----
+## 3) GET `/api/prediccion-congestion/segment-history`
 
-## 3) GET `/api/congestion/predictions/segment-history`
-
-Returns one segment history across all available timeslots.
+Returns segment history and future points for one `roadId`.
 
 ### Request
 
 - Method: `GET`
 - Query params:
-  - `mviCodigo` (required, number/string numeric)
+  - `roadId` (required, string)
   - `areaId` (optional, string)
 
-### Response `200`
+### Response `200` (populated shape)
 
 ```json
 {
   "data": {
-    "mviCodigo": 1001,
-    "areaId": "1",
+    "roadId": "1001_north",
     "totalItems": 2,
-    "items": [
+    "history_items": [
       {
-        "timeslot": "2026-02-28T06:00:00.000Z",
-        "label": "06:00",
-        "day": "2026-02-28",
-        "velocity": 24.1,
-        "level": 2.1,
-        "delay": 26.0,
-        "jams": 0
-      },
+        "road_id": "1001_north",
+        "timeslot": "2026-03-16T19:45:00",
+        "predicted_level": 2.1,
+        "predicted_velocity": 24.1,
+        "source": "history"
+      }
+    ],
+    "future_items": [
       {
-        "timeslot": "2026-02-28T06:15:00.000Z",
-        "label": "06:15",
-        "day": "2026-02-28",
-        "velocity": 21.3,
-        "level": 2.8,
-        "delay": 31.0,
-        "jams": 1
+        "road_id": "1001_north",
+        "timeslot": "2026-03-16T20:00:00",
+        "predicted_level": 2.8,
+        "predicted_velocity": 21.3,
+        "source": "forecast"
       }
     ]
+  }
+}
+```
+
+### Response `200` (valid request, empty history)
+
+```json
+{
+  "data": {
+    "roadId": "1001",
+    "totalItems": 0,
+    "history_items": [],
+    "future_items": []
   }
 }
 ```
@@ -183,7 +190,7 @@ Returns one segment history across all available timeslots.
 
 ```json
 {
-  "message": "Query param mviCodigo is required"
+  "message": "Query param roadId is required"
 }
 ```
 
@@ -195,77 +202,30 @@ Returns one segment history across all available timeslots.
 }
 ```
 
----
-
 ## Method Constraints
 
-Any non-GET method under `/api/congestion/predictions*` should return `405`:
+Any non-GET method under `/api/prediccion-congestion/*` should return `405`.
 
-```json
-{
-  "message": "Method not allowed"
-}
-```
+## Data Availability Semantics
 
-## Data Contract (Mandatory Fields)
+- `metadata` may expose slots that do not yet have predictions for all areas.
+- `predictions-areas` can return `404` for a valid `areaId + timeslot` combination when no predictions exist.
+- Partial coverage is expected: only roads with computed predictions are returned in `items`.
+- `segment-history` can return `200` with empty arrays for roads without stored history.
 
-### `metadata.data`
+## Frontend Compatibility Mapping
 
-- `generatedAt`: string (ISO-8601)
-- `stepMinutes`: number (positive integer)
-- `referenceTimeslot`: string (ISO-8601, fixed forecast reference point)
-- `pastPeriods`: number (configured historical window size)
-- `futurePeriods`: number (configured forecast window size)
-- `regions`: array of `{ areaId: string, name: string }`
-- `timeframes`: ordered array of ISO-8601 timestamps
+Current frontend service normalizes this backend contract to internal UI models in `lib/prediction/congestion-predictions-service.ts`:
 
-### `predictions.data.items[]`
+- `metadata.data.slots[].timeslot` -> `timeframes[]`
+- `metadata` derived internally -> `stepMinutes`, `referenceTimeslot`, `pastPeriods`, `futurePeriods`
+- `items[].road_id` -> `roadId`
+- `items[].predicted_velocity` -> `velocity`
+- `items[].predicted_level` -> `level`
+- `segment-history` merged from `history_items + future_items` and sorted by `timeslot`
 
-- `mviCodigo`: number
-- `id`: number (can equal `mviCodigo`)
-- `areaId`: string
-- `title`: string
-- `coordinates`: array of `[lng, lat]`
-- `velocity`: number
-- `level`: number
-- `delay`: number
-- `day`: string (`YYYY-MM-DD`)
-- `hour`: string (`HH:mm`)
-- `timeslot`: string (ISO-8601)
+This means backend payload names in this document are authoritative, while frontend component props may use normalized names.
 
-### `segment-history.data.items[]`
+## Legacy Path Note
 
-- `timeslot`: string (ISO-8601)
-- `label`: string (`HH:mm`)
-- `day`: string (`YYYY-MM-DD`)
-- `velocity`: number
-- `level`: number
-- `delay`: number
-- `jams`: number
-
-## Behavioral Requirements
-
-- `timeframes` must be sorted ascending and stable within a session.
-- `referenceTimeslot` must be set to the last closed slot relative to backend current time.
-- `timeframes` must be a bounded window around `referenceTimeslot`: `pastPeriods` behind and `futurePeriods` ahead (clamped by data availability).
-- `timeslot` in `/predictions` must be validated against `metadata.timeframes`.
-- `segment-history` must return all available points for that segment in chronological order.
-- `areaId` in `segment-history` is optional; if provided and does not match segment area, return empty `items`.
-- Response envelope (`data` for 2xx, `message` for error statuses) must stay consistent.
-
-## Performance Expectations
-
-- `/metadata`: lightweight bootstrap response.
-- `/predictions`: optimized for one `areaId + timeslot` (map repaint).
-- `/segment-history`: optimized for one segment across the timeline (analytics modal).
-
-## Client Usage Guidance
-
-- Timeline/map rendering uses `/api/congestion/predictions` by `areaId + timeslot`.
-- Segment analytics uses `/api/congestion/predictions/segment-history` (one call per segment).
-- Metadata bootstrap uses `/api/congestion/predictions/metadata` once and cache locally.
-
-## Migration Notes
-
-- Preferred: implement canonical production paths and update frontend service paths.
-- Transitional: expose both canonical and compatibility alias paths until frontend switch is completed.
+Paths under `/api/congestion/predictions/*` in older docs are legacy references and are not the currently integrated backend contract in this branch.

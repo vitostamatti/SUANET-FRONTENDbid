@@ -43,7 +43,7 @@ export const usePredictionSegmentHistory = ({
 
         const historyResponse = await getCongestionPredictionSegmentHistory(
           "",
-          selectedPredictionSegment.mviCodigo,
+          selectedPredictionSegment.roadId,
           selectedPredictionSegment.areaId || selectedPredictionRegion,
         );
 
@@ -53,13 +53,17 @@ export const usePredictionSegmentHistory = ({
 
         const history = predictionTimeframes
           .map((timeslot, index) => {
-            const fallbackDate = new Date(predictionTimeframes[index] || "");
-            const fallbackDay = Number.isNaN(fallbackDate.getTime())
-              ? ""
-              : fallbackDate.toISOString().slice(0, 10);
-            const fallbackHour = Number.isNaN(fallbackDate.getTime())
-              ? ""
-              : fallbackDate.toISOString().slice(11, 16);
+            const normalizedTimeslot = (predictionTimeframes[index] || "")
+              .trim()
+              .replace(" ", "T");
+            const fallbackDay =
+              normalizedTimeslot.length >= 10
+                ? normalizedTimeslot.slice(0, 10)
+                : "";
+            const fallbackHour =
+              normalizedTimeslot.length >= 16
+                ? normalizedTimeslot.slice(11, 16)
+                : "";
 
             const found = historyByTimeslot.get(timeslot);
 
@@ -70,7 +74,6 @@ export const usePredictionSegmentHistory = ({
                 day: fallbackDay,
                 velocity: null,
                 level: null,
-                delay: null,
                 jams: 0,
                 hasData: false,
                 index,
@@ -81,11 +84,17 @@ export const usePredictionSegmentHistory = ({
               timeslot: found.timeslot,
               label: found.label,
               day: found.day,
-              velocity: Number(found.velocity || 0),
-              level: Number(found.level || 0),
-              delay: Number(found.delay || 0),
-              jams: 0,
-              hasData: true,
+              velocity:
+                found.velocity === null || found.velocity === undefined
+                  ? null
+                  : Number(found.velocity),
+              level:
+                found.level === null || found.level === undefined
+                  ? null
+                  : Number(found.level),
+              jams: Number(found.jams || 0),
+              hasData: found.hasData !== false,
+              source: found.source,
               index,
             };
           })

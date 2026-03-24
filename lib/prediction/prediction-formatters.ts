@@ -74,7 +74,6 @@ export const getHistoryAverages = (
     return {
       averageLevel: 0,
       averageVelocity: 0,
-      averageDelay: 0,
     };
   }
 
@@ -86,13 +85,8 @@ export const getHistoryAverages = (
     validHistory.reduce((sum, point) => sum + Number(point.velocity || 0), 0) /
     validHistory.length;
 
-  const averageDelay =
-    validHistory.reduce((sum, point) => sum + Number(point.delay || 0), 0) /
-    validHistory.length;
-
   return {
     averageLevel,
     averageVelocity,
-    averageDelay,
   };
 };

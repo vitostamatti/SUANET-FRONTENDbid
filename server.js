@@ -13,9 +13,6 @@ const https = require("https");
 const cron = require("node-cron");
 const os = require("os");
 const crypto = require("crypto");
-const {
-  handleMockCongestionRoutes,
-} = require("./server/mock-congestion/routes");
 
 // ============================================
 // BASIC SECURITY HEADERS (CSP REMOVED FOR VIDEO STREAMING)
@@ -281,13 +278,50 @@ app.prepare().then(() => {
       return;
     }
 
-    if (pathname.startsWith("/api/mock/congestion")) {
-      handleMockCongestionRoutes({
-        pathname,
-        method: req.method,
-        parsedUrl,
-        res,
-      });
+    if (pathname === "/api-endpoints/mvi.json") {
+      try {
+        const sourcePath = path.join(
+          process.cwd(),
+          "data",
+          "api-endpoints",
+          "mvi.json",
+        );
+
+        fs.accessSync(sourcePath, fs.constants.R_OK);
+
+        res.writeHead(200, {
+          "Content-Type": "application/json; charset=utf-8",
+          "Cache-Control": "no-cache, no-store, must-revalidate",
+          Pragma: "no-cache",
+          Expires: "0",
+        });
+
+        const fileStream = fs.createReadStream(sourcePath);
+        fileStream.on("error", (streamError) => {
+          if (!res.headersSent) {
+            res.writeHead(500, { "Content-Type": "application/json" });
+          }
+
+          res.end(
+            JSON.stringify({
+              success: false,
+              message: "Failed to read local MVI file",
+              error: streamError.message,
+            }),
+          );
+        });
+
+        fileStream.pipe(res);
+      } catch (error) {
+        res.writeHead(404, { "Content-Type": "application/json" });
+        res.end(
+          JSON.stringify({
+            success: false,
+            message: "Local MVI file not found",
+          }),
+        );
+      }
+
       return;
     }
 
@@ -459,6 +493,53 @@ app.prepare().then(() => {
       return;
     }
 
+    // Debug-only static serving for files under /data
+    if (pathname.startsWith("/data/")) {
+      const dataDir = path.join(process.cwd(), "data");
+      const relativePath = pathname.replace(/^\/data\//, "");
+      const requestedPath = path.join(dataDir, relativePath);
+      const normalizedPath = path.normalize(requestedPath);
+
+      if (!normalizedPath.startsWith(dataDir)) {
+        res.writeHead(403, { "Content-Type": "text/plain" });
+        res.end("Forbidden");
+        return;
+      }
+
+      try {
+        fs.accessSync(normalizedPath, fs.constants.F_OK);
+
+        const ext = path.extname(normalizedPath).toLowerCase();
+        const mimeTypes = {
+          ".json": "application/json; charset=utf-8",
+          ".geojson": "application/geo+json; charset=utf-8",
+          ".txt": "text/plain; charset=utf-8",
+        };
+
+        res.setHeader(
+          "Content-Type",
+          mimeTypes[ext] || "application/octet-stream",
+        );
+        res.setHeader("Cache-Control", "no-store");
+
+        const fileStream = fs.createReadStream(normalizedPath);
+        fileStream.pipe(res);
+
+        fileStream.on("error", (err) => {
+          console.error("[Data Server] Error reading file:", err);
+          if (!res.headersSent) {
+            res.writeHead(500, { "Content-Type": "text/plain" });
+            res.end("Internal Server Error");
+          }
+        });
+      } catch (error) {
+        res.writeHead(404, { "Content-Type": "text/plain" });
+        res.end("Not Found");
+      }
+
+      return;
+    }
+
     // Handle Next.js static assets with appropriate caching and CORRECT MIME types
     if (pathname.startsWith("/_next/static/")) {
       // For Next.js static assets, apply basic security headers
@@ -510,8 +591,27 @@ app.prepare().then(() => {
   server.on("upgrade", (req, socket, head) => {
     const parsedUrl = parse(req.url, true);
     const { pathname } = parsedUrl;
+    const upgradeHandler =
+      typeof app.getUpgradeHandler === "function"
+        ? app.getUpgradeHandler()
+        : null;
 
     console.log("Recibida solicitud WebSocket en:", pathname);
+
+    // In development, Next.js HMR uses this websocket path.
+    // Do not close it, delegate to Next's upgrade handler.
+    if (pathname && pathname.startsWith("/_next/webpack-hmr")) {
+      if (upgradeHandler) {
+        upgradeHandler(req, socket, head);
+        return;
+      }
+
+      console.log(
+        "Solicitud WebSocket HMR recibida pero no hay upgrade handler de Next disponible",
+      );
+      socket.end("HTTP/1.1 426 Upgrade Required\r\n\r\n");
+      return;
+    }
 
     if (pathname.startsWith("/socket.io")) {
       console.log(

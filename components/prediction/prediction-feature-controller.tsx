@@ -20,13 +20,16 @@ export function PredictionFeatureController({
   predictionPolylinesRef,
   infoWindowRef,
   opcDropdownVel,
-  predictionLoading,
   predictionAnalysisLoading,
   predictionInteractionDisabled,
   predictionLoadingCorridors,
   predictionCongestionData,
   predictionWidgetVisible,
+  predictionLoading,
+  predictionNoDataMessage,
   predictionRegions,
+  selectedPredictionAreaType,
+  onPredictionAreaTypeChange,
   selectedPredictionRegion,
   onPredictionRegionChange,
   predictionTimeframes,
@@ -160,12 +163,16 @@ export function PredictionFeatureController({
           selectedPredictionRegion={selectedPredictionRegion}
           onPredictionRegionChange={onPredictionRegionChange}
           predictionRegions={predictionRegions}
+          selectedPredictionAreaType={selectedPredictionAreaType}
+          onPredictionAreaTypeChange={onPredictionAreaTypeChange}
           predictionStepMinutes={predictionStepMinutes}
           predictionTimeframes={predictionTimeframes}
           displayedTimeslotIndex={displayedTimeslotIndex}
           canControlTimeline={
             canControlTimeline && !predictionInteractionDisabled
           }
+          predictionLoading={predictionLoading}
+          predictionNoDataMessage={predictionNoDataMessage}
           isPredictionPlaying={isPredictionPlaying}
           setIsPredictionPlaying={setIsPredictionPlaying}
           moveTimeslot={moveTimeslot}

@@ -24,7 +24,7 @@ import {
 } from "../../lib/prediction/prediction-formatters";
 import { useMemo, useState } from "react";
 
-type Metric = "level" | "velocity" | "delay";
+type Metric = "level" | "velocity";
 
 interface PredictionSegmentAnalyticsModalProps {
   selectedPredictionSegment: CongestionPredictionSegment | null;
@@ -39,13 +39,11 @@ interface PredictionSegmentAnalyticsModalProps {
 const metricLabels: Record<Metric, string> = {
   level: "Nivel",
   velocity: "Velocidad",
-  delay: "Retraso",
 };
 
 const metricColors: Record<Metric, string> = {
   level: "#f19d5d",
   velocity: "#6bca70",
-  delay: "#dd4e47",
 };
 
 export function PredictionSegmentAnalyticsModal({
@@ -85,7 +83,7 @@ export function PredictionSegmentAnalyticsModal({
     });
   }, [segmentHistoryData, selectedMetric, selectedTimeslotIndex]);
 
-  const { averageLevel, averageVelocity, averageDelay } = useMemo(
+  const { averageLevel, averageVelocity } = useMemo(
     () => getHistoryAverages(segmentHistoryData),
     [segmentHistoryData],
   );
@@ -152,7 +150,7 @@ export function PredictionSegmentAnalyticsModal({
             </div>
             <div className="text-xs text-slate-400">
               {selectedPredictionSegment.title ||
-                `Segmento ${selectedPredictionSegment.mviCodigo}`}
+                `Segmento ${selectedPredictionSegment.roadId}`}
             </div>
           </div>
           <button
@@ -195,14 +193,6 @@ export function PredictionSegmentAnalyticsModal({
                   {averageVelocity.toFixed(2)}
                 </div>
               </div>
-              <div className="rounded-lg bg-slate-900 p-2">
-                <div className="text-[11px] text-slate-400">
-                  Promedio de Retraso
-                </div>
-                <div className="text-base font-bold text-slate-100">
-                  {averageDelay.toFixed(2)}
-                </div>
-              </div>
             </div>
 
             <div className="mb-3 flex flex-wrap gap-2.5">
@@ -217,7 +207,6 @@ export function PredictionSegmentAnalyticsModal({
                 >
                   <option value="level">Nivel</option>
                   <option value="velocity">Velocidad</option>
-                  <option value="delay">Retraso</option>
                 </select>
               </label>
             </div>

@@ -1,17 +1,27 @@
 import {
-  CongestionPredictionCorridor,
   CongestionPredictionSegment,
+  CongestionPredictionRegion,
 } from "../../lib/prediction/congestion-predictions-service";
+
+export interface PredictionLoadingCorridor {
+  id: string | number;
+  fid: number;
+  name: string;
+  paths: [number, number][][];
+}
 
 export interface PredictionFeatureProps {
   opcDropdownVel: string;
   predictionWidgetVisible: boolean;
-  predictionLoading: boolean;
   predictionAnalysisLoading: boolean;
   predictionInteractionDisabled: boolean;
-  predictionLoadingCorridors: CongestionPredictionCorridor[];
+  predictionLoadingCorridors: PredictionLoadingCorridor[];
+  predictionLoading: boolean;
+  predictionNoDataMessage: string;
   predictionCongestionData: CongestionPredictionSegment[];
-  predictionRegions: Array<{ areaId: string; name: string }>;
+  predictionRegions: CongestionPredictionRegion[];
+  selectedPredictionAreaType: string;
+  onPredictionAreaTypeChange: (areaType: string) => void;
   selectedPredictionRegion: string;
   onPredictionRegionChange: (areaId: string) => void;
   predictionTimeframes: string[];

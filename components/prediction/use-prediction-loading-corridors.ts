@@ -1,14 +1,14 @@
 "use client";
 
 import { MutableRefObject, useEffect, useRef } from "react";
-import { CongestionPredictionCorridor } from "../../lib/prediction/congestion-predictions-service";
 import { isPredictionLayerOption } from "../../lib/prediction/prediction-formatters";
+import { PredictionLoadingCorridor } from "./prediction-types";
 
 interface UsePredictionLoadingCorridorsParams {
   mapInstanceRef: MutableRefObject<google.maps.Map | null>;
   opcDropdownVel: string;
   predictionAnalysisLoading: boolean;
-  predictionLoadingCorridors: CongestionPredictionCorridor[];
+  predictionLoadingCorridors: PredictionLoadingCorridor[];
 }
 
 export const usePredictionLoadingCorridors = ({
@@ -159,14 +159,6 @@ export const usePredictionLoadingCorridors = ({
             mapInstance.setZoom(minimumCorridorZoom);
           }
         }, 50);
-      }
-
-      if (drawnPathCount === 0) {
-        console.warn("[Prediction Loading] No valid corridor paths were drawn");
-      } else {
-        console.info(
-          `[Prediction Loading] Drawn corridor paths: ${drawnPathCount}`,
-        );
       }
 
       return drawnPathCount > 0;
