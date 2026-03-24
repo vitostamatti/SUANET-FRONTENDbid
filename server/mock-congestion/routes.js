@@ -1,6 +1,7 @@
 const {
   initializeMockCongestionData,
   getMockCongestionMetadata,
+  getMockCongestionCorridors,
   getCongestionRowsForAreaAndTimeslot,
   getCongestionSegmentHistory,
   isValidMockTimeslot,
@@ -28,6 +29,19 @@ const handleMockCongestionRoutes = async ({
       console.error("❌ [Mock Congestion] Metadata error:", error);
       return sendJson(res, 500, {
         message: "Failed to initialize mock congestion metadata",
+      });
+    }
+  }
+
+  if (pathname === "/api/mock/congestion/corridors" && method === "GET") {
+    try {
+      return sendJson(res, 200, {
+        data: getMockCongestionCorridors(),
+      });
+    } catch (error) {
+      console.error("❌ [Mock Congestion] Corridors error:", error);
+      return sendJson(res, 500, {
+        message: "Failed to load mock congestion corridors",
       });
     }
   }

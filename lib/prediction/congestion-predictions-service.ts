@@ -29,6 +29,21 @@ export interface CongestionPredictionSegment {
   areaId: string;
 }
 
+export interface CongestionPredictionCorridor {
+  id: string | number;
+  fid: number;
+  name: string;
+  paths: [number, number][][];
+}
+
+export interface CongestionPredictionCorridorsResponse {
+  data: {
+    generatedAt: string;
+    totalItems: number;
+    items: CongestionPredictionCorridor[];
+  };
+}
+
 export interface CongestionPredictionsDataResponse {
   data: {
     generatedAt: string;
@@ -104,6 +119,21 @@ export const getCongestionPredictionsByRegionAndTime = async (
   );
 
   const payload = await assertOk<CongestionPredictionsDataResponse>(response);
+  return payload.data;
+};
+
+export const getCongestionPredictionCorridors = async (
+  backendUrl: string,
+): Promise<CongestionPredictionCorridorsResponse["data"]> => {
+  const response = await fetch(`${backendUrl}/api/mock/congestion/corridors`, {
+    method: "GET",
+    headers: {
+      Accept: "application/json",
+    },
+  });
+
+  const payload =
+    await assertOk<CongestionPredictionCorridorsResponse>(response);
   return payload.data;
 };
 

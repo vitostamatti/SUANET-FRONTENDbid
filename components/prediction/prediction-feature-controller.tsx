@@ -7,6 +7,7 @@ import { isPredictionLayerOption } from "../../lib/prediction/prediction-formatt
 import { PredictionFeatureProps } from "./prediction-types";
 import { usePredictionFeature } from "./use-prediction-feature";
 import { usePredictionLayer } from "./use-prediction-layer";
+import { usePredictionLoadingCorridors } from "./use-prediction-loading-corridors";
 
 interface PredictionFeatureControllerProps extends PredictionFeatureProps {
   mapInstanceRef: MutableRefObject<google.maps.Map | null>;
@@ -19,6 +20,10 @@ export function PredictionFeatureController({
   predictionPolylinesRef,
   infoWindowRef,
   opcDropdownVel,
+  predictionLoading,
+  predictionAnalysisLoading,
+  predictionInteractionDisabled,
+  predictionLoadingCorridors,
   predictionCongestionData,
   predictionWidgetVisible,
   predictionRegions,
@@ -63,6 +68,20 @@ export function PredictionFeatureController({
     predictionCongestionData,
     onSegmentClick: setSelectedPredictionSegment,
   });
+
+  usePredictionLoadingCorridors({
+    mapInstanceRef,
+    opcDropdownVel,
+    predictionAnalysisLoading,
+    predictionLoadingCorridors,
+  });
+
+  useEffect(() => {
+    if (predictionAnalysisLoading) {
+      // Force a fresh region fit after loading animation completes.
+      lastZoomedRegionRef.current = "";
+    }
+  }, [predictionAnalysisLoading]);
 
   useEffect(() => {
     if (!isPredictionLayerActive) {
@@ -115,7 +134,17 @@ export function PredictionFeatureController({
       return;
     }
 
-    mapInstance.fitBounds(bounds, 20);
+    mapInstance.fitBounds(bounds, 8);
+
+    window.setTimeout(() => {
+      const currentZoom = mapInstance.getZoom();
+      const minimumAreaZoom = 14.5;
+
+      if (typeof currentZoom === "number" && currentZoom < minimumAreaZoom) {
+        mapInstance.setZoom(minimumAreaZoom);
+      }
+    }, 40);
+
     lastZoomedRegionRef.current = selectedPredictionRegion;
   }, [
     isPredictionLayerActive,
@@ -134,7 +163,9 @@ export function PredictionFeatureController({
           predictionStepMinutes={predictionStepMinutes}
           predictionTimeframes={predictionTimeframes}
           displayedTimeslotIndex={displayedTimeslotIndex}
-          canControlTimeline={canControlTimeline}
+          canControlTimeline={
+            canControlTimeline && !predictionInteractionDisabled
+          }
           isPredictionPlaying={isPredictionPlaying}
           setIsPredictionPlaying={setIsPredictionPlaying}
           moveTimeslot={moveTimeslot}

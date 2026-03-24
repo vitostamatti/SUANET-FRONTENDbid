@@ -112,7 +112,6 @@ interface MapaGoogleMapsProps extends PredictionFeatureProps {
   congestionDataAlta: any;
   congestionDataMedia: any;
   congestionDataBaja: any;
-  predictionLoading: boolean;
   ubicacionesAlertas: any[];
   onChangeActualizar: (
     on: boolean,
@@ -156,6 +155,9 @@ export default function MapaGoogleMapsAlertVel({
   onPredictionTimeslotChange,
   predictionStepMinutes,
   predictionLoading,
+  predictionAnalysisLoading,
+  predictionInteractionDisabled,
+  predictionLoadingCorridors,
   ubicacionesAlertas,
   onChangeActualizar,
   onChangeActualizarStreaming,
@@ -3209,6 +3211,10 @@ export default function MapaGoogleMapsAlertVel({
         infoWindowRef={infoWindowRef}
         opcDropdownVel={opcDropdownVel}
         predictionWidgetVisible={predictionWidgetVisible}
+        predictionLoading={predictionLoading}
+        predictionAnalysisLoading={predictionAnalysisLoading}
+        predictionInteractionDisabled={predictionInteractionDisabled}
+        predictionLoadingCorridors={predictionLoadingCorridors}
         predictionCongestionData={predictionCongestionData}
         predictionRegions={predictionRegions}
         selectedPredictionRegion={selectedPredictionRegion}
@@ -3219,6 +3225,18 @@ export default function MapaGoogleMapsAlertVel({
         onPredictionTimeslotChange={onPredictionTimeslotChange}
         predictionStepMinutes={predictionStepMinutes}
       />
+
+      {predictionAnalysisLoading && (
+        <div className="absolute inset-0 z-[14] bg-slate-950/20 backdrop-blur-[1px]">
+          <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
+            <img
+              src="/SUANET-IA-V3.gif"
+              alt="Loading AI analysis"
+              className="h-44 w-44 object-contain"
+            />
+          </div>
+        </div>
+      )}
 
       <div ref={mapRef} className="map-wrapper"></div>
     </div>

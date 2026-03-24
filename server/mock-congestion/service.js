@@ -13,6 +13,13 @@ const REGIONS_GEOJSON_FILE = path.join(
   "data",
   "regions.geojson",
 );
+const CORREDORES_GEOJSON_FILE = path.join(
+  process.cwd(),
+  "data",
+  "corredores.geojson",
+);
+
+let corridorsCache = null;
 
 const toPositiveInt = (value, fallback) => {
   const parsed = Number(value);
@@ -71,6 +78,85 @@ const DEFAULT_PREDICTION_TREND = (() => {
 const toFiniteNumber = (value) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
+};
+
+const normalizeLineString = (coordinates) => {
+  if (!Array.isArray(coordinates) || coordinates.length < 2) {
+    return [];
+  }
+
+  const normalizedPath = coordinates
+    .map((coordinate) => {
+      if (!Array.isArray(coordinate) || coordinate.length < 2) {
+        return null;
+      }
+
+      const lng = toFiniteNumber(coordinate[0]);
+      const lat = toFiniteNumber(coordinate[1]);
+
+      if (lng === null || lat === null) {
+        return null;
+      }
+
+      return [lng, lat];
+    })
+    .filter(Boolean);
+
+  return normalizedPath.length >= 2 ? [normalizedPath] : [];
+};
+
+const normalizeMultiLineString = (coordinates) => {
+  if (!Array.isArray(coordinates)) {
+    return [];
+  }
+
+  return coordinates
+    .map((lineCoordinates) => normalizeLineString(lineCoordinates))
+    .flat();
+};
+
+const getMockCongestionCorridors = () => {
+  if (corridorsCache) {
+    return corridorsCache;
+  }
+
+  const payload = safeReadJSON(CORREDORES_GEOJSON_FILE);
+  const features = Array.isArray(payload?.features) ? payload.features : [];
+
+  const items = features
+    .map((feature, index) => {
+      const geometry = feature?.geometry;
+      const properties = feature?.properties || {};
+      const type = geometry?.type;
+
+      let paths = [];
+
+      if (type === "LineString") {
+        paths = normalizeLineString(geometry.coordinates);
+      } else if (type === "MultiLineString") {
+        paths = normalizeMultiLineString(geometry.coordinates);
+      }
+
+      if (paths.length === 0) {
+        return null;
+      }
+
+      return {
+        id: feature?.id ?? properties.FID ?? index,
+        fid: toFiniteNumber(properties.FID) ?? index,
+        name: String(properties.CORREDOR || `Corredor ${index + 1}`),
+        paths,
+      };
+    })
+    .filter(Boolean);
+
+  corridorsCache = {
+    generatedAt: new Date().toISOString(),
+    totalItems: items.length,
+    items,
+  };
+
+  return corridorsCache;
 };
 
 const getLineMidpoint = (coordinates) => {
@@ -676,6 +762,7 @@ const isValidMockTimeslot = (timeslot) =>
 module.exports = {
   initializeMockCongestionData,
   getMockCongestionMetadata,
+  getMockCongestionCorridors,
   getCongestionRowsForAreaAndTimeslot,
   getCongestionSegmentHistory,
   isValidMockTimeslot,

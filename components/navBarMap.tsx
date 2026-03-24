@@ -13,7 +13,9 @@ import Map from "./mapaGooglemapsAlertVel";
 import ControlPanel from "./control-panel";
 import { off } from "process";
 import {
+  CongestionPredictionCorridor,
   CongestionPredictionSegment,
+  getCongestionPredictionCorridors,
   getCongestionPredictionsByRegionAndTime,
   getCongestionPredictionsMetadata,
 } from "../lib/prediction/congestion-predictions-service";
@@ -144,6 +146,11 @@ export default function NavBarMap({ lat, lng, vistaTrafico }: navBarMapsProps) {
     CongestionPredictionSegment[]
   >([]);
   const [predictionLoading, setPredictionLoading] = useState(false);
+  const [predictionAnalysisLoading, setPredictionAnalysisLoading] =
+    useState(false);
+  const [predictionLoadingCorridors, setPredictionLoadingCorridors] = useState<
+    CongestionPredictionCorridor[]
+  >([]);
   const predictionDataCacheRef = useRef<
     Map<string, CongestionPredictionSegment[]>
   >(new globalThis.Map<string, CongestionPredictionSegment[]>());
@@ -438,6 +445,49 @@ export default function NavBarMap({ lat, lng, vistaTrafico }: navBarMapsProps) {
   }, [backendUrl]);
 
   useEffect(() => {
+    let isCancelled = false;
+
+    if (opcVel !== "PREDICCIONES_CONGESTION") {
+      setPredictionAnalysisLoading(false);
+      setPredictionLoadingCorridors([]);
+      return () => {
+        isCancelled = true;
+      };
+    }
+
+    setPredictionAnalysisLoading(true);
+
+    const minimumDurationPromise = new Promise((resolve) => {
+      window.setTimeout(resolve, 3500);
+    });
+
+    const corridorsPromise = getCongestionPredictionCorridors(backendUrl)
+      .catch(() => getCongestionPredictionCorridors(""))
+      .then((response) => {
+        if (!isCancelled) {
+          setPredictionLoadingCorridors(response.items || []);
+        }
+      })
+      .catch((error) => {
+        console.error("Error loading congestion corridors:", error);
+        if (!isCancelled) {
+          setPredictionLoadingCorridors([]);
+        }
+      });
+
+    Promise.all([minimumDurationPromise, corridorsPromise]).finally(() => {
+      if (isCancelled) {
+        return;
+      }
+      setPredictionAnalysisLoading(false);
+    });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [backendUrl, opcVel]);
+
+  useEffect(() => {
     const fetchPredictionData = async () => {
       if (opcVel !== "PREDICCIONES_CONGESTION") {
         return;
@@ -541,6 +591,12 @@ export default function NavBarMap({ lat, lng, vistaTrafico }: navBarMapsProps) {
     buildPredictionCacheKey,
     setPredictionCacheEntry,
   ]);
+
+  const predictionInteractionDisabled =
+    predictionAnalysisLoading || predictionLoading;
+  const visiblePredictionCongestionData = predictionAnalysisLoading
+    ? []
+    : predictionCongestionData;
 
   const handleLayerToggleAlertas = (name: string, on: boolean) => {
     //console.log(`Layer '${name}' toggled: ${on ? true : false}`);
@@ -2199,7 +2255,11 @@ export default function NavBarMap({ lat, lng, vistaTrafico }: navBarMapsProps) {
           congestionDataMedia={congestionDataMedia}
           congestionDataBaja={congestionDataBaja}
           predictionWidgetVisible={predictionWidgetVisible}
-          predictionCongestionData={predictionCongestionData}
+          predictionLoading={predictionLoading}
+          predictionAnalysisLoading={predictionAnalysisLoading}
+          predictionInteractionDisabled={predictionInteractionDisabled}
+          predictionLoadingCorridors={predictionLoadingCorridors}
+          predictionCongestionData={visiblePredictionCongestionData}
           predictionRegions={predictionRegions}
           selectedPredictionRegion={selectedPredictionRegion}
           onPredictionRegionChange={setSelectedPredictionRegion}
@@ -2208,7 +2268,6 @@ export default function NavBarMap({ lat, lng, vistaTrafico }: navBarMapsProps) {
           selectedPredictionTimeslot={selectedPredictionTimeslot}
           onPredictionTimeslotChange={setSelectedPredictionTimeslot}
           predictionStepMinutes={predictionStepMinutes}
-          predictionLoading={predictionLoading}
           ubicacionesAlertas={dataGeoAlertas}
           onChangeActualizar={handleActualizar}
           onChangeActualizarStreaming={handleActualizarStreaming}
