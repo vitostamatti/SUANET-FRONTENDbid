@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { MarkerClusterer } from "@googlemaps/markerclusterer";
 import { PredictionFeatureController } from "./prediction/prediction-feature-controller";
 import { PredictionFeatureProps } from "./prediction/prediction-types";
+import { FutureAlertFocus } from "./coordinateContext";
 
 declare global {
   interface Window {
@@ -107,6 +108,7 @@ interface MapaGoogleMapsProps extends PredictionFeatureProps {
   desvios: any[];
   inteligentes: any[];
   opcDropdownVel: string;
+  futureAlertFocus: FutureAlertFocus | null;
   lat: number;
   lng: number;
   congestionDataAlta: any;
@@ -139,6 +141,7 @@ export default function MapaGoogleMapsAlertVel({
   desvios,
   inteligentes,
   opcDropdownVel,
+  futureAlertFocus,
   lat,
   lng,
   congestionDataAlta,
@@ -196,6 +199,8 @@ export default function MapaGoogleMapsAlertVel({
   const animationRefs = useRef<number[]>([]);
   const polylineRefs = useRef<google.maps.Polyline[]>([]);
   const predictionPolylinesRef = useRef<google.maps.Polyline[]>([]);
+  const futureAlertPolylinesRef = useRef<google.maps.Polyline[]>([]);
+  const futureAlertAnimationRef = useRef<number | null>(null);
   const recommendationPolylinesRef = useRef<google.maps.Polyline[]>([]); // Polilíneas de recomendaciones que persisten
   const destinationMarkerRef = useRef<google.maps.Marker | null>(null);
   const originMarkersRef = useRef<google.maps.Marker[]>([]);
@@ -216,6 +221,235 @@ export default function MapaGoogleMapsAlertVel({
 
   const [latitud1, setLatitud] = useState<number>(lat);
   const [longitud1, setLongitud] = useState<number>(lng);
+  const [mapReadyVersion, setMapReadyVersion] = useState(0);
+
+  const clearFutureAlertOverlay = useCallback(() => {
+    if (futureAlertAnimationRef.current) {
+      window.clearInterval(futureAlertAnimationRef.current);
+      futureAlertAnimationRef.current = null;
+    }
+
+    futureAlertPolylinesRef.current.forEach((polyline) =>
+      polyline.setMap(null),
+    );
+    futureAlertPolylinesRef.current = [];
+  }, []);
+
+  const drawFutureAlertOverlay = useCallback(
+    (mapInstance: google.maps.Map, focus: FutureAlertFocus) => {
+      clearFutureAlertOverlay();
+
+      if (
+        !window.google ||
+        !Array.isArray(focus.paths) ||
+        focus.paths.length === 0
+      ) {
+        return;
+      }
+
+      const bounds = new window.google.maps.LatLngBounds();
+      let hasPoint = false;
+      let openedInitialPopover = false;
+      const glowPolylines: google.maps.Polyline[] = [];
+
+      focus.paths.forEach((path) => {
+        if (!Array.isArray(path) || path.length < 2) {
+          return;
+        }
+
+        const normalizedPath = path
+          .map((coordinate) => {
+            const lng = Number(coordinate[0]);
+            const lat = Number(coordinate[1]);
+
+            if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+              return null;
+            }
+
+            bounds.extend({ lat, lng });
+            hasPoint = true;
+
+            return { lat, lng };
+          })
+          .filter(
+            (
+              point,
+            ): point is {
+              lat: number;
+              lng: number;
+            } => point !== null,
+          );
+
+        if (normalizedPath.length < 2) {
+          return;
+        }
+
+        const basePolyline = new window.google.maps.Polyline({
+          path: normalizedPath,
+          geodesic: true,
+          strokeColor: "#f59e0b",
+          strokeOpacity: 0.95,
+          strokeWeight: 5,
+          zIndex: 110,
+        });
+
+        const glowPolyline = new window.google.maps.Polyline({
+          path: normalizedPath,
+          geodesic: true,
+          strokeColor: "#fde68a",
+          strokeOpacity: 0.45,
+          strokeWeight: 9,
+          zIndex: 109,
+        });
+
+        const getFutureAlertInfoContent = () => {
+          const peakHour = focus.peakTimeslot
+            ? focus.peakTimeslot.slice(11, 16)
+            : "N/A";
+          const peakDay = focus.peakTimeslot
+            ? focus.peakTimeslot.slice(0, 10)
+            : "N/A";
+          const severityLabel =
+            typeof focus.severityScore === "number"
+              ? focus.severityScore.toFixed(2)
+              : "N/A";
+          const predictedLevelLabel =
+            typeof focus.predictedLevel === "number"
+              ? String(focus.predictedLevel)
+              : "N/A";
+          const affectedLabel =
+            typeof focus.affectedCount === "number"
+              ? String(focus.affectedCount)
+              : "N/A";
+
+          const content = document.createElement("div");
+          content.classList.add("property");
+          content.style.minWidth = "300px";
+          content.style.height = "auto";
+          content.style.padding = "8px";
+
+          const iconDiv = document.createElement("div");
+          iconDiv.classList.add("icon");
+          const iconImg = document.createElement("img");
+          iconImg.src = iconUrlCongestion2;
+          iconImg.alt = "Alerta futura";
+          iconImg.title = "Alerta futura";
+          iconDiv.appendChild(iconImg);
+
+          const detailsDiv = document.createElement("div");
+          detailsDiv.classList.add("details");
+
+          const titleDiv = document.createElement("div");
+          titleDiv.classList.add("id");
+          titleDiv.textContent = focus.roadName || "Tramo sin nombre";
+          detailsDiv.appendChild(titleDiv);
+
+          const alertIdDiv = document.createElement("div");
+          alertIdDiv.classList.add("specifics");
+          alertIdDiv.textContent = `Alerta futura ID: ${focus.alertId}`;
+          detailsDiv.appendChild(alertIdDiv);
+
+          const severityDiv = document.createElement("div");
+          severityDiv.classList.add("specifics");
+          severityDiv.textContent = `Severidad: ${severityLabel} | Nivel: ${predictedLevelLabel}`;
+          detailsDiv.appendChild(severityDiv);
+
+          const featuresDiv = document.createElement("div");
+          featuresDiv.classList.add("features");
+
+          const appendFeature = (src: string, title: string, text: string) => {
+            const feature = document.createElement("div");
+            const img = document.createElement("img");
+            img.src = src;
+            img.alt = `${title} icon`;
+            img.title = title;
+
+            const span = document.createElement("span");
+            span.textContent = text;
+
+            feature.appendChild(img);
+            feature.appendChild(span);
+            featuresDiv.appendChild(feature);
+          };
+
+          appendFeature(iconAfectados, "Afectados", affectedLabel);
+          appendFeature(iconUrlClockCongestion, "Hora pico", peakHour);
+          appendFeature(iconUrlCalendar, "Fecha", peakDay);
+          appendFeature(
+            iconCoordenadas,
+            "Coordenadas",
+            `${focus.center.lat.toFixed(6)}, ${focus.center.lng.toFixed(6)}`,
+          );
+
+          detailsDiv.appendChild(featuresDiv);
+
+          content.appendChild(iconDiv);
+          content.appendChild(detailsDiv);
+
+          return content;
+        };
+
+        const openFutureAlertInfoWindow = (
+          event?: google.maps.PolyMouseEvent,
+        ) => {
+          const infoWindow =
+            infoWindowRef.current || new window.google.maps.InfoWindow();
+          infoWindowRef.current = infoWindow;
+
+          const position = event?.latLng || {
+            lat: focus.center.lat,
+            lng: focus.center.lng,
+          };
+
+          infoWindow.setContent(getFutureAlertInfoContent());
+          infoWindow.setPosition(position);
+          infoWindow.open({ map: mapInstance });
+        };
+
+        glowPolyline.setMap(mapInstance);
+        basePolyline.setMap(mapInstance);
+        glowPolyline.addListener("click", openFutureAlertInfoWindow);
+        basePolyline.addListener("click", openFutureAlertInfoWindow);
+
+        if (!openedInitialPopover) {
+          openFutureAlertInfoWindow();
+          openedInitialPopover = true;
+        }
+
+        futureAlertPolylinesRef.current.push(glowPolyline, basePolyline);
+        glowPolylines.push(glowPolyline);
+      });
+
+      if (!hasPoint) {
+        return;
+      }
+
+      mapInstance.fitBounds(bounds, 80);
+
+      window.setTimeout(() => {
+        const currentZoom = mapInstance.getZoom();
+        const minZoom = 14;
+
+        if (typeof currentZoom === "number" && currentZoom < minZoom) {
+          mapInstance.setZoom(minZoom);
+        }
+      }, 40);
+
+      let phase = 0;
+      futureAlertAnimationRef.current = window.setInterval(() => {
+        phase += 0.2;
+        const pulse = (Math.sin(phase) + 1) / 2;
+
+        glowPolylines.forEach((polyline) => {
+          polyline.setOptions({
+            strokeOpacity: 0.3 + pulse * 0.4,
+            strokeWeight: 7 + pulse * 3,
+          });
+        });
+      }, 90);
+    },
+    [clearFutureAlertOverlay],
+  );
 
   const clustererRefs = useRef<{
     incidente: MarkerClusterer | null;
@@ -758,6 +992,7 @@ export default function MapaGoogleMapsAlertVel({
 
       // Guardar referencia del mapa para usarlo en otras funciones
       mapInstanceRef.current = map;
+      setMapReadyVersion((previous) => previous + 1);
 
       // la orientación de la cámara en grados en sentido horario desde el norte, pero sólo funciona ara lugares cómo USA y con zoom mayor a 16
       //map.setHeading(45);
@@ -3185,6 +3420,40 @@ export default function MapaGoogleMapsAlertVel({
 
     return () => clearInterval(interval);
   }, [ubicaciones, opcDropdownVel, ubicacionesAlertas, recomendaciones]);
+
+  useEffect(() => {
+    const mapInstance = mapInstanceRef.current;
+
+    if (!mapInstance || !window.google) {
+      return;
+    }
+
+    if (!futureAlertFocus) {
+      clearFutureAlertOverlay();
+      return;
+    }
+
+    drawFutureAlertOverlay(mapInstance, futureAlertFocus);
+
+    return () => {
+      clearFutureAlertOverlay();
+    };
+  }, [
+    clearFutureAlertOverlay,
+    drawFutureAlertOverlay,
+    futureAlertFocus,
+    mapReadyVersion,
+    opcDropdownVel,
+    lat,
+    lng,
+    zoom,
+  ]);
+
+  useEffect(() => {
+    return () => {
+      clearFutureAlertOverlay();
+    };
+  }, [clearFutureAlertOverlay]);
 
   const router = useRouter();
 

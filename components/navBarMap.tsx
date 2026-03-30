@@ -21,6 +21,7 @@ import {
   getCongestionPredictionsTotalesByTime,
 } from "../lib/prediction/congestion-predictions-service";
 import { PredictionLoadingCorridor } from "./prediction/prediction-types";
+import { FutureAlertFocus } from "./coordinateContext";
 
 const buildPredictionLoadingCorridors = (
   payload: any,
@@ -109,9 +110,15 @@ interface navBarMapsProps {
   lat: number;
   lng: number;
   vistaTrafico: string;
+  futureAlertFocus: FutureAlertFocus | null;
 }
 
-export default function NavBarMap({ lat, lng, vistaTrafico }: navBarMapsProps) {
+export default function NavBarMap({
+  lat,
+  lng,
+  vistaTrafico,
+  futureAlertFocus,
+}: navBarMapsProps) {
   const MIN_PREDICTION_ENTRY_LOADING_MS = 2500;
 
   // Backend URL configuration
@@ -2574,6 +2581,7 @@ export default function NavBarMap({ lat, lng, vistaTrafico }: navBarMapsProps) {
           desvios={desviosData}
           inteligentes={inteligentesData}
           opcDropdownVel={opcVel}
+          futureAlertFocus={futureAlertFocus}
           lat={latitud}
           lng={longitud}
           congestionDataAlta={congestionDataAlta}

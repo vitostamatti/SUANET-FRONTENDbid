@@ -1,11 +1,96 @@
 "use client";
 
-import Image from "next/image";
-import { Card, Title, Text, Button } from "@tremor/react";
+import { Card, Button } from "@tremor/react";
 import React, { useState, useEffect } from "react";
 import AlertTable from "../../../components/table";
 import LoadingScreen from "../../../components/loadingScreen";
-import { useSearchParams } from "next/navigation";
+
+interface FutureAlertRow {
+  alertId: string;
+  roadName: string;
+  severityScore: number;
+  predictedLevel: number;
+  affectedCount: number;
+  peakTimeslot: string;
+  centerLat: number;
+  centerLng: number;
+  paths: [number, number][][];
+}
+
+const normalizeFutureAlerts = (payload: any): FutureAlertRow[] => {
+  const features = payload?.data?.alert_items?.features;
+
+  if (!Array.isArray(features)) {
+    return [];
+  }
+
+  return features
+    .map((feature: any) => {
+      const geometry = feature?.geometry || feature?.grometry;
+      const properties = feature?.properties || {};
+
+      const normalizeLinePath = (coordinates: any): [number, number][] => {
+        if (!Array.isArray(coordinates)) {
+          return [];
+        }
+
+        return coordinates
+          .map((point) => {
+            if (!Array.isArray(point) || point.length < 2) {
+              return null;
+            }
+
+            const lng = Number(point[0]);
+            const lat = Number(point[1]);
+
+            if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+              return null;
+            }
+
+            return [lng, lat] as [number, number];
+          })
+          .filter((point): point is [number, number] => point !== null);
+      };
+
+      let paths: [number, number][][] = [];
+
+      if (geometry?.type === "LineString") {
+        const path = normalizeLinePath(geometry.coordinates);
+        if (path.length >= 2) {
+          paths = [path];
+        }
+      } else if (geometry?.type === "MultiLineString") {
+        paths = (geometry.coordinates || [])
+          .map((line: any) => normalizeLinePath(line))
+          .filter((line: [number, number][]) => line.length >= 2);
+      }
+
+      const allPoints = paths.flat();
+      const validCenter = allPoints.length > 0;
+
+      const centerLng = validCenter
+        ? allPoints.reduce((sum, point) => sum + point[0], 0) / allPoints.length
+        : 0;
+      const centerLat = validCenter
+        ? allPoints.reduce((sum, point) => sum + point[1], 0) / allPoints.length
+        : 0;
+
+      return {
+        alertId: String(properties.alert_id ?? ""),
+        roadName: Array.isArray(properties.road_names)
+          ? String(properties.road_names[0] || "Sin nombre")
+          : "Sin nombre",
+        severityScore: Number(properties.severity_score || 0),
+        predictedLevel: Number(properties.predicted_level || 0),
+        affectedCount: Number(properties.affected_count || 0),
+        peakTimeslot: String(properties.peak_timeslot || ""),
+        centerLat,
+        centerLng,
+        paths,
+      };
+    })
+    .filter((row: FutureAlertRow) => row.alertId.length > 0);
+};
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +106,9 @@ export default function AlertPanel() {
   const [dataWaze, setDataWaze] = useState<any[]>([]);
   const [dataJams, setDataJams] = useState<any[]>([]);
   const [dataInteligentes, setDataInteligentes] = useState<any[]>([]);
+  const [dataFutureAlerts, setDataFutureAlerts] = useState<FutureAlertRow[]>(
+    [],
+  );
 
   const [boton, setBoton] = useState("P1");
 
@@ -93,6 +181,17 @@ export default function AlertPanel() {
             "Error al obtener datos de alertas inteligentes para el listado",
           );
         }
+
+        const responseFutureAlerts = await fetch(
+          `${backendUrl}/api/prediccion-congestion/future-alerts`,
+        );
+
+        if (responseFutureAlerts.ok) {
+          const payloadFutureAlerts = await responseFutureAlerts.json();
+          setDataFutureAlerts(normalizeFutureAlerts(payloadFutureAlerts));
+        } else {
+          console.error("Error al obtener alertas futuras de prediccion");
+        }
       } catch (error) {
         console.error("Error en la solicitud:", error);
       } finally {
@@ -101,7 +200,7 @@ export default function AlertPanel() {
       }
     }
     fetchData();
-  }, []);
+  }, [backendUrl]);
 
   const handleClickP1 = () => {
     setBoton("P1");
@@ -121,6 +220,10 @@ export default function AlertPanel() {
 
   const handleClickInteligentes = () => {
     setBoton("INTELIGENTES");
+  };
+
+  const handleClickFutureAlerts = () => {
+    setBoton("FUTURE_ALERTS");
   };
 
   return (
@@ -187,6 +290,18 @@ export default function AlertPanel() {
         >
           Inteligentes
         </Button>
+
+        <Button
+          style={{
+            backgroundColor: boton === "FUTURE_ALERTS" ? "#1e40af" : "#323432",
+            color: "white",
+            border: "none",
+            marginRight: "5px",
+          }}
+          onClick={() => handleClickFutureAlerts()}
+        >
+          Alertas Futuras
+        </Button>
       </div>
 
       <div className="z-10 max-w-5xl w-full items-center justify-between font-mono text-sm lg:flex">
@@ -205,6 +320,10 @@ export default function AlertPanel() {
         ) : boton === "INTELIGENTES" ? (
           <p className="fixed left-0 top-0 flex w-full justify-center border-b bg-gradient-to-b from-zinc-200 pb-6 pt-8 backdrop-blur-2xl dark:border-neutral-800 dark:bg-zinc-800/30 dark:from-inherit lg:static lg:w-auto lg:rounded-xl lg:border lg:bg-gray-200 lg:p-4 lg:dark:bg-zinc-800/30 mt-4">
             Lista de Alertas Inteligentes
+          </p>
+        ) : boton === "FUTURE_ALERTS" ? (
+          <p className="fixed left-0 top-0 flex w-full justify-center border-b bg-gradient-to-b from-zinc-200 pb-6 pt-8 backdrop-blur-2xl dark:border-neutral-800 dark:bg-zinc-800/30 dark:from-inherit lg:static lg:w-auto lg:rounded-xl lg:border lg:bg-gray-200 lg:p-4 lg:dark:bg-zinc-800/30 mt-4">
+            Lista de Alertas Futuras de Congestion
           </p>
         ) : (
           <p className="fixed left-0 top-0 flex w-full justify-center border-b bg-gradient-to-b from-zinc-200 pb-6 pt-8 backdrop-blur-2xl dark:border-neutral-800 dark:bg-zinc-800/30 dark:from-inherit lg:static lg:w-auto lg:rounded-xl lg:border lg:bg-gray-200 lg:p-4 lg:dark:bg-zinc-800/30 mt-4">
@@ -231,6 +350,10 @@ export default function AlertPanel() {
         ) : boton === "INTELIGENTES" ? (
           <Card className="mt-1">
             <AlertTable datos={dataInteligentes} tipoTrafico={boton} />
+          </Card>
+        ) : boton === "FUTURE_ALERTS" ? (
+          <Card className="mt-1">
+            <AlertTable datos={dataFutureAlerts} tipoTrafico={boton} />
           </Card>
         ) : (
           <Card className="mt-1">

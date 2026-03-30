@@ -307,11 +307,18 @@ export default function Home() {
 }
 
 const NavBarMapWithCoordinates: React.FC = () => {
-  const { lat, lng, vistaTrafico } = useCoordinates();
+  const { lat, lng, vistaTrafico, futureAlertFocus } = useCoordinates();
 
   useEffect(() => {
     //console.log(`Updated coordinates: Lat - ${lat}, Lng - ${lng}, Vista Trafico - ${vistaTrafico}`);
   }, [lat, lng, vistaTrafico]);
 
-  return <NavBarMap lat={lat} lng={lng} vistaTrafico={vistaTrafico} />;
+  return (
+    <NavBarMap
+      lat={lat}
+      lng={lng}
+      vistaTrafico={vistaTrafico}
+      futureAlertFocus={futureAlertFocus}
+    />
+  );
 };

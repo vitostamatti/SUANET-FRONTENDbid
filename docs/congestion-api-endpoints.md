@@ -238,6 +238,7 @@ Real response example (trimmed):
 			"features": [
 				{
 					"type": "Feature",
+					"grometry":{},
 					"properties": {
 						"alert_id": 1,
 						"predicted_level": 3,
