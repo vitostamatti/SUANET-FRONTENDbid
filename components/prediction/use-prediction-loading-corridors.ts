@@ -19,14 +19,13 @@ export const usePredictionLoadingCorridors = ({
 }: UsePredictionLoadingCorridorsParams) => {
   const loadingPolylinesRef = useRef<google.maps.Polyline[]>([]);
   const loadingAnimationIntervalsRef = useRef<number[]>([]);
+  const mapWaitIntervalRef = useRef<number | null>(null);
 
   useEffect(() => {
-    let mapWaitIntervalId: number | null = null;
-
     const clearLoadingAnimation = () => {
-      if (mapWaitIntervalId !== null) {
-        window.clearInterval(mapWaitIntervalId);
-        mapWaitIntervalId = null;
+      if (mapWaitIntervalRef.current !== null) {
+        window.clearInterval(mapWaitIntervalRef.current);
+        mapWaitIntervalRef.current = null;
       }
 
       loadingAnimationIntervalsRef.current.forEach((intervalId) => {
@@ -192,11 +191,11 @@ export const usePredictionLoadingCorridors = ({
     const didDrawImmediately = tryDrawCorridors();
 
     if (!didDrawImmediately) {
-      mapWaitIntervalId = window.setInterval(() => {
+      mapWaitIntervalRef.current = window.setInterval(() => {
         const didDraw = tryDrawCorridors();
-        if (didDraw && mapWaitIntervalId !== null) {
-          window.clearInterval(mapWaitIntervalId);
-          mapWaitIntervalId = null;
+        if (didDraw && mapWaitIntervalRef.current !== null) {
+          window.clearInterval(mapWaitIntervalRef.current);
+          mapWaitIntervalRef.current = null;
         }
       }, 120);
     }

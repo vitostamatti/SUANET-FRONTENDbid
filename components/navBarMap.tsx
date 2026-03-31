@@ -221,6 +221,7 @@ export default function NavBarMap({ lat, lng, vistaTrafico }: navBarMapsProps) {
   const [predictionNoDataMessage, setPredictionNoDataMessage] = useState("");
   const [predictionEntryLoading, setPredictionEntryLoading] = useState(false);
   const predictionRequestIdRef = useRef(0);
+  const predictionEntryCycleRef = useRef(0);
   const predictionEntryLoadingSinceRef = useRef<number | null>(null);
   const predictionEntryLoadingTimeoutRef = useRef<ReturnType<
     typeof setTimeout
@@ -269,33 +270,44 @@ export default function NavBarMap({ lat, lng, vistaTrafico }: navBarMapsProps) {
     [buildPredictionCacheKey],
   );
 
-  const stopPredictionEntryLoadingWithMinimumDuration = useCallback(() => {
-    if (predictionEntryLoadingTimeoutRef.current) {
-      clearTimeout(predictionEntryLoadingTimeoutRef.current);
-      predictionEntryLoadingTimeoutRef.current = null;
-    }
+  const stopPredictionEntryLoadingWithMinimumDuration = useCallback(
+    (entryCycle = predictionEntryCycleRef.current) => {
+      if (entryCycle !== predictionEntryCycleRef.current) {
+        return;
+      }
 
-    const startedAt = predictionEntryLoadingSinceRef.current;
-    if (!startedAt) {
-      setPredictionEntryLoading(false);
-      return;
-    }
+      if (predictionEntryLoadingTimeoutRef.current) {
+        clearTimeout(predictionEntryLoadingTimeoutRef.current);
+        predictionEntryLoadingTimeoutRef.current = null;
+      }
 
-    const elapsed = Date.now() - startedAt;
-    const remaining = Math.max(MIN_PREDICTION_ENTRY_LOADING_MS - elapsed, 0);
+      const startedAt = predictionEntryLoadingSinceRef.current;
+      if (!startedAt) {
+        setPredictionEntryLoading(false);
+        return;
+      }
 
-    if (remaining === 0) {
-      predictionEntryLoadingSinceRef.current = null;
-      setPredictionEntryLoading(false);
-      return;
-    }
+      const elapsed = Date.now() - startedAt;
+      const remaining = Math.max(MIN_PREDICTION_ENTRY_LOADING_MS - elapsed, 0);
 
-    predictionEntryLoadingTimeoutRef.current = setTimeout(() => {
-      predictionEntryLoadingSinceRef.current = null;
-      predictionEntryLoadingTimeoutRef.current = null;
-      setPredictionEntryLoading(false);
-    }, remaining);
-  }, []);
+      if (remaining === 0) {
+        predictionEntryLoadingSinceRef.current = null;
+        setPredictionEntryLoading(false);
+        return;
+      }
+
+      predictionEntryLoadingTimeoutRef.current = setTimeout(() => {
+        if (entryCycle !== predictionEntryCycleRef.current) {
+          return;
+        }
+
+        predictionEntryLoadingSinceRef.current = null;
+        predictionEntryLoadingTimeoutRef.current = null;
+        setPredictionEntryLoading(false);
+      }, remaining);
+    },
+    [],
+  );
 
   useEffect(() => {
     return () => {
@@ -767,13 +779,16 @@ export default function NavBarMap({ lat, lng, vistaTrafico }: navBarMapsProps) {
   useEffect(() => {
     const fetchPredictionData = async () => {
       if (opcVel !== "PREDICCIONES_CONGESTION") {
+        setPredictionLoading(false);
         setPredictionNoDataMessage("");
         return;
       }
 
       if (!selectedPredictionTimeslot) {
+        setPredictionLoading(false);
         setPredictionCongestionData([]);
         setPredictionNoDataMessage("");
+        stopPredictionEntryLoadingWithMinimumDuration();
         return;
       }
 
@@ -784,6 +799,7 @@ export default function NavBarMap({ lat, lng, vistaTrafico }: navBarMapsProps) {
         setSelectedPredictionTimeslot(
           predictionReferenceTimeslot || predictionTimeframes[0],
         );
+        stopPredictionEntryLoadingWithMinimumDuration();
         return;
       }
 
@@ -877,6 +893,7 @@ export default function NavBarMap({ lat, lng, vistaTrafico }: navBarMapsProps) {
     predictionTimeframes,
     buildPredictionCacheKey,
     buildPredictionNoDataMessage,
+    stopPredictionEntryLoadingWithMinimumDuration,
     setPredictionCacheEntry,
   ]);
 
@@ -886,6 +903,8 @@ export default function NavBarMap({ lat, lng, vistaTrafico }: navBarMapsProps) {
     const isPredictionsMode = opcVel === "PREDICCIONES_CONGESTION";
 
     if (!wasPredictionsMode && isPredictionsMode) {
+      predictionEntryCycleRef.current += 1;
+
       if (predictionEntryLoadingTimeoutRef.current) {
         clearTimeout(predictionEntryLoadingTimeoutRef.current);
         predictionEntryLoadingTimeoutRef.current = null;
@@ -902,19 +921,34 @@ export default function NavBarMap({ lat, lng, vistaTrafico }: navBarMapsProps) {
         setSelectedPredictionTimeslot(predictionReferenceTimeslot);
       } else if (predictionTimeframes.length > 0) {
         setSelectedPredictionTimeslot(predictionTimeframes[0]);
+      } else {
+        stopPredictionEntryLoadingWithMinimumDuration(
+          predictionEntryCycleRef.current,
+        );
       }
     } else if (wasPredictionsMode && !isPredictionsMode) {
+      predictionEntryCycleRef.current += 1;
+      predictionRequestIdRef.current += 1;
+
       if (predictionEntryLoadingTimeoutRef.current) {
         clearTimeout(predictionEntryLoadingTimeoutRef.current);
         predictionEntryLoadingTimeoutRef.current = null;
       }
 
       predictionEntryLoadingSinceRef.current = null;
+      setSelectedPredictionTimeslot("");
+      setSelectedPredictionRegion("");
+      setPredictionLoading(false);
       setPredictionEntryLoading(false);
     }
 
     previousOpcVelRef.current = opcVel;
-  }, [opcVel, predictionReferenceTimeslot, predictionTimeframes]);
+  }, [
+    opcVel,
+    predictionReferenceTimeslot,
+    predictionTimeframes,
+    stopPredictionEntryLoadingWithMinimumDuration,
+  ]);
 
   const predictionAnalysisLoading =
     opcVel === "PREDICCIONES_CONGESTION" && predictionEntryLoading;
