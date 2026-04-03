@@ -37,6 +37,8 @@ export function PredictionFeatureController({
   selectedPredictionTimeslot,
   onPredictionTimeslotChange,
   predictionStepMinutes,
+  predictionCitywideFullHorizonMode,
+  onPredictionCitywideFullHorizonModeChange,
 }: PredictionFeatureControllerProps) {
   const isPredictionLayerActive = isPredictionLayerOption(opcDropdownVel);
   const lastZoomedRegionRef = useRef("");
@@ -84,6 +86,16 @@ export function PredictionFeatureController({
       lastZoomedRegionRef.current = "";
     }
   }, [predictionAnalysisLoading]);
+
+  useEffect(() => {
+    if (predictionCitywideFullHorizonMode && isPredictionPlaying) {
+      setIsPredictionPlaying(false);
+    }
+  }, [
+    predictionCitywideFullHorizonMode,
+    isPredictionPlaying,
+    setIsPredictionPlaying,
+  ]);
 
   useEffect(() => {
     if (!isPredictionLayerActive) {
@@ -168,9 +180,15 @@ export function PredictionFeatureController({
           predictionTimeframes={predictionTimeframes}
           displayedTimeslotIndex={displayedTimeslotIndex}
           canControlTimeline={
-            canControlTimeline && !predictionInteractionDisabled
+            canControlTimeline &&
+            !predictionInteractionDisabled &&
+            !predictionCitywideFullHorizonMode
           }
           predictionLoading={predictionLoading}
+          predictionCitywideFullHorizonMode={predictionCitywideFullHorizonMode}
+          onPredictionCitywideFullHorizonModeChange={
+            onPredictionCitywideFullHorizonModeChange
+          }
           isPredictionPlaying={isPredictionPlaying}
           setIsPredictionPlaying={setIsPredictionPlaying}
           moveTimeslot={moveTimeslot}

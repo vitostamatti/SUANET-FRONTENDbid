@@ -144,11 +144,25 @@ Real response example (trimmed):
 
 ## 5. Citywide Predictions
 
-Purpose: top segments citywide for a selected timeslot.
+Purpose: top segments citywide.
+
+Variant A (timeline snapshot): selected timeslot.
 
 Example request:
 
 - https://suanet-test.movilidadbogota.gov.co/api/prediccion-congestion/predictions-totales?timeslot=2026-03-24T18:00:00
+
+Variant B (full horizon, no timeslot): max congestion over the full prediction window.
+
+Example request:
+
+- https://suanet-test.movilidadbogota.gov.co/api/prediccion-congestion/predictions-totales
+
+UI behavior in SUANET:
+
+1. Prediccion de congestion starts in a citywide full-horizon mode (toggle ON by default).
+2. In that mode, the app calls `predictions-totales` without `timeslot`.
+3. Users can turn the toggle OFF to restore the existing timeline behavior (slider + optional area selection).
 
 Real response example (trimmed):
 

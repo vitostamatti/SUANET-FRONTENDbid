@@ -656,27 +656,33 @@ export const getCongestionPredictionsByRegionAndTime = async (
 
 export const getCongestionPredictionsTotalesByTime = async (
   backendUrl: string,
-  timeslot: string,
+  timeslot?: string,
 ): Promise<CongestionPredictionsDataResponse["data"]> => {
   const baseUrl = resolveBackendUrl(backendUrl);
-  const searchParams = new URLSearchParams({
-    timeslot: normalizeTimeslot(timeslot),
-  });
+  const normalizedTimeslot = normalizeTimeslot(timeslot);
+  const searchParams = new URLSearchParams();
 
-  const response = await fetch(
-    `${baseUrl}/api/prediccion-congestion/predictions-totales?${searchParams.toString()}`,
-    {
-      method: "GET",
-      headers: {
-        Accept: "application/json",
-      },
+  if (normalizedTimeslot) {
+    searchParams.set("timeslot", normalizedTimeslot);
+  }
+
+  const query = searchParams.toString();
+  const endpoint =
+    query.length > 0
+      ? `${baseUrl}/api/prediccion-congestion/predictions-totales?${query}`
+      : `${baseUrl}/api/prediccion-congestion/predictions-totales`;
+
+  const response = await fetch(endpoint, {
+    method: "GET",
+    headers: {
+      Accept: "application/json",
     },
-  );
+  });
 
   if (response.status === 404) {
     return {
       generatedAt: "",
-      timeslot: normalizeTimeslot(timeslot),
+      timeslot: normalizedTimeslot,
       areaId: CITYWIDE_PREDICTION_AREA_ID,
       totalItems: 0,
       items: [],

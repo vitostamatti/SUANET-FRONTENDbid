@@ -156,6 +156,8 @@ export default function MapaGoogleMapsAlertVel({
   selectedPredictionTimeslot,
   onPredictionTimeslotChange,
   predictionStepMinutes,
+  predictionCitywideFullHorizonMode,
+  onPredictionCitywideFullHorizonModeChange,
   predictionLoading,
   predictionAnalysisLoading,
   predictionInteractionDisabled,
@@ -3229,6 +3231,10 @@ export default function MapaGoogleMapsAlertVel({
         selectedPredictionTimeslot={selectedPredictionTimeslot}
         onPredictionTimeslotChange={onPredictionTimeslotChange}
         predictionStepMinutes={predictionStepMinutes}
+        predictionCitywideFullHorizonMode={predictionCitywideFullHorizonMode}
+        onPredictionCitywideFullHorizonModeChange={
+          onPredictionCitywideFullHorizonModeChange
+        }
         predictionNoDataMessage={predictionNoDataMessage}
       />
 
