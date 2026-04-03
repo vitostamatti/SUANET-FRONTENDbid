@@ -30,7 +30,6 @@ interface PredictionTimelinePanelProps {
   displayedTimeslotIndex: number;
   canControlTimeline: boolean;
   predictionLoading: boolean;
-  predictionNoDataMessage: string;
   isPredictionPlaying: boolean;
   setIsPredictionPlaying: React.Dispatch<React.SetStateAction<boolean>>;
   moveTimeslot: (direction: -1 | 1) => void;
@@ -131,7 +130,6 @@ export function PredictionTimelinePanel({
   displayedTimeslotIndex,
   canControlTimeline,
   predictionLoading,
-  predictionNoDataMessage,
   isPredictionPlaying,
   setIsPredictionPlaying,
   moveTimeslot,
@@ -160,6 +158,16 @@ export function PredictionTimelinePanel({
 
   return (
     <div className="absolute bottom-5 right-5 z-[11] w-80 rounded-lg border border-slate-700/70 bg-slate-900/90 p-3 text-slate-100 shadow-xl backdrop-blur">
+      {predictionLoading && (
+        <div
+          className="pointer-events-none absolute right-3 top-3 flex items-center"
+          aria-live="polite"
+        >
+          <span className="sr-only">Cargando predicciones</span>
+          <span className="h-3 w-3 animate-spin rounded-full border border-slate-500 border-t-slate-200/90 opacity-80" />
+        </div>
+      )}
+
       <label className="mb-2 grid gap-1 text-[13px] font-semibold text-slate-100">
         Tipo de area
         <PredictionAreaTypeSelect
@@ -247,16 +255,6 @@ export function PredictionTimelinePanel({
           predictionTimeframes[displayedTimeslotIndex] || "",
         )}
       </div>
-      {predictionLoading && (
-        <div className="mt-2 text-xs text-slate-300">
-          Cargando predicciones...
-        </div>
-      )}
-      {!predictionLoading && predictionNoDataMessage && (
-        <div className="mt-2 rounded border border-slate-600/80 bg-slate-800/80 p-2 text-xs text-slate-200">
-          {predictionNoDataMessage}
-        </div>
-      )}
     </div>
   );
 }

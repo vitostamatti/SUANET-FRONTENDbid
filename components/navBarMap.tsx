@@ -112,7 +112,7 @@ interface navBarMapsProps {
 }
 
 export default function NavBarMap({ lat, lng, vistaTrafico }: navBarMapsProps) {
-  const MIN_PREDICTION_ENTRY_LOADING_MS = 2500;
+  const MIN_PREDICTION_ENTRY_LOADING_MS = 3600;
 
   // Backend URL configuration
   const backendUrl =

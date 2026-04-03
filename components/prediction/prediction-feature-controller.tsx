@@ -171,7 +171,6 @@ export function PredictionFeatureController({
             canControlTimeline && !predictionInteractionDisabled
           }
           predictionLoading={predictionLoading}
-          predictionNoDataMessage={predictionNoDataMessage}
           isPredictionPlaying={isPredictionPlaying}
           setIsPredictionPlaying={setIsPredictionPlaying}
           moveTimeslot={moveTimeslot}
