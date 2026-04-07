@@ -683,18 +683,43 @@ export default function NavBarMap({ lat, lng, vistaTrafico }: navBarMapsProps) {
   useEffect(() => {
     const fetchPredictionMetadata = async () => {
       try {
-        const [metadata, areaOptions] = await Promise.all([
+        const [metadataResult, areaOptionsResult] = await Promise.allSettled([
           getCongestionPredictionsMetadata(backendUrl),
-          getCongestionPredictionAreas(backendUrl).catch(() => []),
+          getCongestionPredictionAreas(backendUrl),
         ]);
 
+        const metadata =
+          metadataResult.status === "fulfilled" ? metadataResult.value : null;
+        const areaOptions =
+          areaOptionsResult.status === "fulfilled" ? areaOptionsResult.value : [];
+
+        if (!metadata && areaOptionsResult.status === "rejected") {
+          throw areaOptionsResult.reason;
+        }
+
+        if (!metadata && metadataResult.status === "rejected") {
+          console.error(
+            "Prediction metadata unavailable, enabling citywide-only fallback:",
+            metadataResult.reason,
+          );
+        }
+
+        if (areaOptionsResult.status === "rejected") {
+          console.error(
+            "Prediction areas unavailable, continuing without area filters:",
+            areaOptionsResult.reason,
+          );
+        }
+
         const mergedRegions = (() => {
+          const metadataRegions = metadata?.regions || [];
+
           if (areaOptions.length === 0) {
-            return metadata.regions;
+            return metadataRegions;
           }
 
           const metadataRegionById = new globalThis.Map(
-            metadata.regions.map((region) => [
+            metadataRegions.map((region) => [
               region.areaId.toLowerCase(),
               region,
             ]),
@@ -707,7 +732,7 @@ export default function NavBarMap({ lat, lng, vistaTrafico }: navBarMapsProps) {
           const prioritizedRegions: CongestionPredictionRegion[] = [];
           const usedIds = new globalThis.Set<string>();
 
-          metadata.regions.forEach((metadataRegion) => {
+          metadataRegions.forEach((metadataRegion) => {
             const key = metadataRegion.areaId.toLowerCase();
             const matchingAreaOption = areaOptionById.get(key);
 
@@ -760,13 +785,13 @@ export default function NavBarMap({ lat, lng, vistaTrafico }: navBarMapsProps) {
         })();
 
         setPredictionRegions(mergedRegions);
-        setPredictionTimeframes(metadata.timeframes);
-        setPredictionStepMinutes(metadata.stepMinutes || 15);
+        setPredictionTimeframes(metadata?.timeframes || []);
+        setPredictionStepMinutes(metadata?.stepMinutes || 15);
         const safeReferenceTimeslot =
-          metadata.referenceTimeslot &&
+          metadata?.referenceTimeslot &&
           metadata.timeframes.includes(metadata.referenceTimeslot)
             ? metadata.referenceTimeslot
-            : metadata.timeframes[0] || "";
+            : metadata?.timeframes[0] || "";
 
         setPredictionReferenceTimeslot(safeReferenceTimeslot);
 
@@ -778,11 +803,16 @@ export default function NavBarMap({ lat, lng, vistaTrafico }: navBarMapsProps) {
           return hasPreviousRegion ? previousRegion : "";
         });
 
-        if (metadata.timeframes.length > 0) {
+        if ((metadata?.timeframes || []).length > 0) {
           setSelectedPredictionTimeslot(safeReferenceTimeslot);
+        } else {
+          setSelectedPredictionTimeslot("");
         }
 
-        setOpcPredictions(mergedRegions.length > 0 ? 1 : 0);
+        const predictionFeatureAvailable =
+          Boolean(metadata) || areaOptions.length > 0;
+
+        setOpcPredictions(predictionFeatureAvailable ? 1 : 0);
       } catch (error) {
         console.error("Error loading congestion prediction metadata:", error);
         setOpcPredictions(0);
@@ -993,9 +1023,7 @@ export default function NavBarMap({ lat, lng, vistaTrafico }: navBarMapsProps) {
       } else if (predictionTimeframes.length > 0) {
         setSelectedPredictionTimeslot(predictionTimeframes[0]);
       } else {
-        stopPredictionEntryLoadingWithMinimumDuration(
-          predictionEntryCycleRef.current,
-        );
+        setSelectedPredictionTimeslot("");
       }
     } else if (wasPredictionsMode && !isPredictionsMode) {
       predictionEntryCycleRef.current += 1;
