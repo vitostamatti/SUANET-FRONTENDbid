@@ -222,7 +222,10 @@ export function PredictionFeatureController({
       const currentZoom = mapInstance.getZoom();
       const maximumCitywideZoom = 12.5;
 
-      if (typeof currentZoom === "number" && currentZoom > maximumCitywideZoom) {
+      if (
+        typeof currentZoom === "number" &&
+        currentZoom > maximumCitywideZoom
+      ) {
         mapInstance.setZoom(maximumCitywideZoom);
       }
     }, 40);
