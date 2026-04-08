@@ -691,7 +691,9 @@ export default function NavBarMap({ lat, lng, vistaTrafico }: navBarMapsProps) {
         const metadata =
           metadataResult.status === "fulfilled" ? metadataResult.value : null;
         const areaOptions =
-          areaOptionsResult.status === "fulfilled" ? areaOptionsResult.value : [];
+          areaOptionsResult.status === "fulfilled"
+            ? areaOptionsResult.value
+            : [];
 
         if (!metadata && areaOptionsResult.status === "rejected") {
           throw areaOptionsResult.reason;

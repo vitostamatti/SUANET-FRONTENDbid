@@ -42,6 +42,7 @@ export function PredictionFeatureController({
 }: PredictionFeatureControllerProps) {
   const isPredictionLayerActive = isPredictionLayerOption(opcDropdownVel);
   const lastZoomedRegionRef = useRef("");
+  const lastPredictionViewportRef = useRef("");
 
   const {
     selectedPredictionSegment,
@@ -82,8 +83,9 @@ export function PredictionFeatureController({
 
   useEffect(() => {
     if (predictionAnalysisLoading) {
-      // Force a fresh region fit after loading animation completes.
+      // Force a fresh fit after loading animation completes.
       lastZoomedRegionRef.current = "";
+      lastPredictionViewportRef.current = "";
     }
   }, [predictionAnalysisLoading]);
 
@@ -100,6 +102,7 @@ export function PredictionFeatureController({
   useEffect(() => {
     if (!isPredictionLayerActive) {
       lastZoomedRegionRef.current = "";
+      lastPredictionViewportRef.current = "";
       return;
     }
 
@@ -163,6 +166,72 @@ export function PredictionFeatureController({
   }, [
     isPredictionLayerActive,
     mapInstanceRef,
+    predictionCongestionData,
+    selectedPredictionRegion,
+  ]);
+
+  useEffect(() => {
+    const isCitywideViewport =
+      isPredictionLayerActive &&
+      predictionCitywideFullHorizonMode &&
+      !selectedPredictionRegion;
+
+    if (!isCitywideViewport) {
+      return;
+    }
+
+    const mapInstance = mapInstanceRef.current;
+    if (
+      !mapInstance ||
+      !window.google ||
+      predictionCongestionData.length === 0
+    ) {
+      return;
+    }
+
+    const viewportKey = `citywide:${predictionCongestionData.length}:${predictionCongestionData[0]?.roadId || ""}:${predictionCongestionData[predictionCongestionData.length - 1]?.roadId || ""}`;
+
+    if (lastPredictionViewportRef.current === viewportKey) {
+      return;
+    }
+
+    const bounds = new window.google.maps.LatLngBounds();
+    let hasAtLeastOnePoint = false;
+
+    predictionCongestionData.forEach((segment) => {
+      segment.coordinates.forEach((coordinate) => {
+        const lng = Number(coordinate[0]);
+        const lat = Number(coordinate[1]);
+
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+          return;
+        }
+
+        bounds.extend({ lat, lng });
+        hasAtLeastOnePoint = true;
+      });
+    });
+
+    if (!hasAtLeastOnePoint) {
+      return;
+    }
+
+    mapInstance.fitBounds(bounds, 24);
+
+    window.setTimeout(() => {
+      const currentZoom = mapInstance.getZoom();
+      const maximumCitywideZoom = 12.5;
+
+      if (typeof currentZoom === "number" && currentZoom > maximumCitywideZoom) {
+        mapInstance.setZoom(maximumCitywideZoom);
+      }
+    }, 40);
+
+    lastPredictionViewportRef.current = viewportKey;
+  }, [
+    isPredictionLayerActive,
+    mapInstanceRef,
+    predictionCitywideFullHorizonMode,
     predictionCongestionData,
     selectedPredictionRegion,
   ]);
