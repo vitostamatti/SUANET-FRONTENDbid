@@ -278,53 +278,6 @@ app.prepare().then(() => {
       return;
     }
 
-    if (pathname === "/api-endpoints/mvi.json") {
-      try {
-        const sourcePath = path.join(
-          process.cwd(),
-          "data",
-          "api-endpoints",
-          "mvi.json",
-        );
-
-        fs.accessSync(sourcePath, fs.constants.R_OK);
-
-        res.writeHead(200, {
-          "Content-Type": "application/json; charset=utf-8",
-          "Cache-Control": "no-cache, no-store, must-revalidate",
-          Pragma: "no-cache",
-          Expires: "0",
-        });
-
-        const fileStream = fs.createReadStream(sourcePath);
-        fileStream.on("error", (streamError) => {
-          if (!res.headersSent) {
-            res.writeHead(500, { "Content-Type": "application/json" });
-          }
-
-          res.end(
-            JSON.stringify({
-              success: false,
-              message: "Failed to read local MVI file",
-              error: streamError.message,
-            }),
-          );
-        });
-
-        fileStream.pipe(res);
-      } catch (error) {
-        res.writeHead(404, { "Content-Type": "application/json" });
-        res.end(
-          JSON.stringify({
-            success: false,
-            message: "Local MVI file not found",
-          }),
-        );
-      }
-
-      return;
-    }
-
     // ============================================
     // MODIFICAR: Proxy dinámico para rutas /api con debugging especial para process_stream
     // ============================================
