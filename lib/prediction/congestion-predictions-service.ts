@@ -241,25 +241,13 @@ const toDayAndHour = (
 
 const mviIndexPromises = new Map<string, Promise<Map<string, MviEntry>>>();
 
-const resolveMviSourceUrl = (baseUrl: string): string => {
-  const debugSource = process.env.NEXT_PUBLIC_MVI_SOURCE_URL?.trim();
-  if (!debugSource) {
-    return "/api-endpoints/mvi.json";
-  }
-
-  if (debugSource.startsWith("http://") || debugSource.startsWith("https://")) {
-    return debugSource;
-  }
-
-  return debugSource.startsWith("/") ? debugSource : `/${debugSource}`;
+const resolveMviSourceUrl = (): string => {
+  return "/mvi.json";
 };
 
-const getMviIndex = async (
-  backendUrl: string,
-): Promise<Map<string, MviEntry>> => {
-  const baseUrl = resolveBackendUrl(backendUrl);
-  const mviUrl = resolveMviSourceUrl(baseUrl);
-  const cacheKey = `${baseUrl || "relative"}::${mviUrl}`;
+const getMviIndex = async (): Promise<Map<string, MviEntry>> => {
+  const mviUrl = resolveMviSourceUrl();
+  const cacheKey = mviUrl;
 
   if (!mviIndexPromises.has(cacheKey)) {
     const promise = fetch(mviUrl, {
@@ -477,11 +465,10 @@ const mapListAreas = (
 };
 
 const mapPredictions = async (
-  backendUrl: string,
   payload: BackendPredictionsResponse,
   fallbackAreaId: string,
 ): Promise<CongestionPredictionsDataResponse["data"]> => {
-  const mviIndex = await getMviIndex(backendUrl);
+  const mviIndex = await getMviIndex();
   const rawItems = payload.data.items || [];
   const areaId = payload.data.areaId || fallbackAreaId;
 
@@ -651,32 +638,38 @@ export const getCongestionPredictionsByRegionAndTime = async (
   }
 
   const payload = await assertOk<BackendPredictionsResponse>(response);
-  return mapPredictions(baseUrl, payload, areaId);
+  return mapPredictions(payload, areaId);
 };
 
 export const getCongestionPredictionsTotalesByTime = async (
   backendUrl: string,
-  timeslot: string,
+  timeslot?: string,
 ): Promise<CongestionPredictionsDataResponse["data"]> => {
   const baseUrl = resolveBackendUrl(backendUrl);
-  const searchParams = new URLSearchParams({
-    timeslot: normalizeTimeslot(timeslot),
-  });
+  const normalizedTimeslot = normalizeTimeslot(timeslot);
+  const searchParams = new URLSearchParams();
 
-  const response = await fetch(
-    `${baseUrl}/api/prediccion-congestion/predictions-totales?${searchParams.toString()}`,
-    {
-      method: "GET",
-      headers: {
-        Accept: "application/json",
-      },
+  if (normalizedTimeslot) {
+    searchParams.set("timeslot", normalizedTimeslot);
+  }
+
+  const query = searchParams.toString();
+  const endpoint =
+    query.length > 0
+      ? `${baseUrl}/api/prediccion-congestion/predictions-totales?${query}`
+      : `${baseUrl}/api/prediccion-congestion/predictions-totales`;
+
+  const response = await fetch(endpoint, {
+    method: "GET",
+    headers: {
+      Accept: "application/json",
     },
-  );
+  });
 
   if (response.status === 404) {
     return {
       generatedAt: "",
-      timeslot: normalizeTimeslot(timeslot),
+      timeslot: normalizedTimeslot,
       areaId: CITYWIDE_PREDICTION_AREA_ID,
       totalItems: 0,
       items: [],
@@ -684,7 +677,7 @@ export const getCongestionPredictionsTotalesByTime = async (
   }
 
   const payload = await assertOk<BackendPredictionsResponse>(response);
-  return mapPredictions(baseUrl, payload, CITYWIDE_PREDICTION_AREA_ID);
+  return mapPredictions(payload, CITYWIDE_PREDICTION_AREA_ID);
 };
 
 export const getCongestionPredictionSegmentHistory = async (

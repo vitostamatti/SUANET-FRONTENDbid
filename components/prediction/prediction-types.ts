@@ -29,4 +29,6 @@ export interface PredictionFeatureProps {
   selectedPredictionTimeslot: string;
   onPredictionTimeslotChange: (timeslot: string) => void;
   predictionStepMinutes: number;
+  predictionCitywideFullHorizonMode: boolean;
+  onPredictionCitywideFullHorizonModeChange: (enabled: boolean) => void;
 }

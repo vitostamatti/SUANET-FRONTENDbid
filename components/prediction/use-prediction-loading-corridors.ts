@@ -4,6 +4,99 @@ import { MutableRefObject, useEffect, useRef } from "react";
 import { isPredictionLayerOption } from "../../lib/prediction/prediction-formatters";
 import { PredictionLoadingCorridor } from "./prediction-types";
 
+const BOGOTA_CITY_CENTER = { lat: 4.711, lng: -74.0721 };
+const BEAM_INTERVAL_MS = 70;
+const BEAM_SPEED_PERCENT_PER_TICK = 1.5;
+const BEAM_LENGTH_RATIO = 0.13;
+
+const toMercatorDistance = (
+  a: google.maps.LatLngLiteral,
+  b: google.maps.LatLngLiteral,
+) => {
+  const latScale = 111.32;
+  const avgLatRad = (((a.lat + b.lat) / 2) * Math.PI) / 180;
+  const lngScale = 111.32 * Math.cos(avgLatRad);
+  const dLat = (b.lat - a.lat) * latScale;
+  const dLng = (b.lng - a.lng) * lngScale;
+  return Math.hypot(dLat, dLng);
+};
+
+const interpolatePoint = (
+  a: google.maps.LatLngLiteral,
+  b: google.maps.LatLngLiteral,
+  t: number,
+): google.maps.LatLngLiteral => ({
+  lat: a.lat + (b.lat - a.lat) * t,
+  lng: a.lng + (b.lng - a.lng) * t,
+});
+
+const buildCumulativeDistances = (path: google.maps.LatLngLiteral[]) => {
+  const cumulative: number[] = [0];
+
+  for (let index = 1; index < path.length; index += 1) {
+    cumulative.push(
+      cumulative[index - 1] + toMercatorDistance(path[index - 1], path[index]),
+    );
+  }
+
+  return cumulative;
+};
+
+const pointAtDistance = (
+  path: google.maps.LatLngLiteral[],
+  cumulative: number[],
+  distance: number,
+): google.maps.LatLngLiteral => {
+  const totalLength = cumulative[cumulative.length - 1];
+
+  if (distance <= 0) {
+    return path[0];
+  }
+
+  if (distance >= totalLength) {
+    return path[path.length - 1];
+  }
+
+  for (let index = 1; index < cumulative.length; index += 1) {
+    if (cumulative[index] >= distance) {
+      const segmentStartDistance = cumulative[index - 1];
+      const segmentLength = cumulative[index] - segmentStartDistance;
+      const t =
+        segmentLength > 0
+          ? (distance - segmentStartDistance) / segmentLength
+          : 0;
+      return interpolatePoint(path[index - 1], path[index], t);
+    }
+  }
+
+  return path[path.length - 1];
+};
+
+const extractSegmentPath = (
+  path: google.maps.LatLngLiteral[],
+  cumulative: number[],
+  startDistance: number,
+  endDistance: number,
+) => {
+  if (endDistance <= startDistance) {
+    return [];
+  }
+
+  const segmentPath: google.maps.LatLngLiteral[] = [
+    pointAtDistance(path, cumulative, startDistance),
+  ];
+
+  for (let index = 1; index < path.length - 1; index += 1) {
+    const distance = cumulative[index];
+    if (distance > startDistance && distance < endDistance) {
+      segmentPath.push(path[index]);
+    }
+  }
+
+  segmentPath.push(pointAtDistance(path, cumulative, endDistance));
+  return segmentPath;
+};
+
 interface UsePredictionLoadingCorridorsParams {
   mapInstanceRef: MutableRefObject<google.maps.Map | null>;
   opcDropdownVel: string;
@@ -19,14 +112,13 @@ export const usePredictionLoadingCorridors = ({
 }: UsePredictionLoadingCorridorsParams) => {
   const loadingPolylinesRef = useRef<google.maps.Polyline[]>([]);
   const loadingAnimationIntervalsRef = useRef<number[]>([]);
+  const mapWaitIntervalRef = useRef<number | null>(null);
 
   useEffect(() => {
-    let mapWaitIntervalId: number | null = null;
-
     const clearLoadingAnimation = () => {
-      if (mapWaitIntervalId !== null) {
-        window.clearInterval(mapWaitIntervalId);
-        mapWaitIntervalId = null;
+      if (mapWaitIntervalRef.current !== null) {
+        window.clearInterval(mapWaitIntervalRef.current);
+        mapWaitIntervalRef.current = null;
       }
 
       loadingAnimationIntervalsRef.current.forEach((intervalId) => {
@@ -48,6 +140,13 @@ export const usePredictionLoadingCorridors = ({
       let drawnPathCount = 0;
       const bounds = new window.google.maps.LatLngBounds();
       let hasBoundPoint = false;
+
+      const pathModels: {
+        path: google.maps.LatLngLiteral[];
+        corridorIndex: number;
+        pathIndex: number;
+        centerDistance: number;
+      }[] = [];
 
       predictionLoadingCorridors.forEach((corridor, corridorIndex) => {
         corridor.paths.forEach((corridorPath, pathIndex) => {
@@ -73,77 +172,126 @@ export const usePredictionLoadingCorridors = ({
             return;
           }
 
-          const glowPolyline = new window.google.maps.Polyline({
+          const centerDistance = path.reduce((closestDistance, point) => {
+            const currentDistance = toMercatorDistance(
+              point,
+              BOGOTA_CITY_CENTER,
+            );
+            return Math.min(closestDistance, currentDistance);
+          }, Number.POSITIVE_INFINITY);
+
+          pathModels.push({
+            path,
+            corridorIndex,
+            pathIndex,
+            centerDistance,
+          });
+        });
+      });
+
+      const maxCenterDistance = pathModels.reduce(
+        (maxDistance, model) => Math.max(maxDistance, model.centerDistance),
+        0,
+      );
+
+      pathModels.forEach(
+        ({ path, corridorIndex, pathIndex, centerDistance }) => {
+          const basePolyline = new window.google.maps.Polyline({
             path,
             geodesic: true,
-            strokeColor: "#00d4ff",
-            strokeOpacity: 0.55,
-            strokeWeight: 6,
+            strokeColor: "#6c0a0a",
+            strokeOpacity: 0.18,
+            strokeWeight: 2.4,
             zIndex: 320,
             clickable: false,
           });
 
-          const flowPolyline = new window.google.maps.Polyline({
-            path,
+          const initialBeamPath = [path[0], path[1]];
+
+          const glowPolyline = new window.google.maps.Polyline({
+            path: initialBeamPath,
             geodesic: true,
-            strokeColor: "#ffffff",
-            strokeOpacity: 0.95,
-            strokeWeight: 3.2,
+            strokeColor: "#ff3024",
+            strokeOpacity: 0.42,
+            strokeWeight: 8.5,
             zIndex: 321,
             clickable: false,
-            icons: [
-              {
-                icon: {
-                  path: window.google.maps.SymbolPath.CIRCLE,
-                  scale: 3.8,
-                  fillColor: "#ffffff",
-                  fillOpacity: 1,
-                  strokeOpacity: 0,
-                },
-                offset: `${(corridorIndex * 13 + pathIndex * 7) % 100}%`,
-              },
-            ],
           });
 
+          const beamPolyline = new window.google.maps.Polyline({
+            path: initialBeamPath,
+            geodesic: true,
+            strokeColor: "#ff6f61",
+            strokeOpacity: 0.95,
+            strokeWeight: 4.2,
+            zIndex: 322,
+            clickable: false,
+          });
+
+          const cumulative = buildCumulativeDistances(path);
+          const totalLength = cumulative[cumulative.length - 1];
+          if (!Number.isFinite(totalLength) || totalLength <= 0) {
+            return;
+          }
+
+          const centerDistanceRatio =
+            maxCenterDistance > 0
+              ? Math.min(1, centerDistance / maxCenterDistance)
+              : 0;
+          const phaseOffsetPercent =
+            centerDistanceRatio * 24 + corridorIndex * 5 + pathIndex * 2;
+
+          basePolyline.setMap(mapInstance);
           glowPolyline.setMap(mapInstance);
-          flowPolyline.setMap(mapInstance);
-          loadingPolylinesRef.current.push(glowPolyline, flowPolyline);
+          beamPolyline.setMap(mapInstance);
+          loadingPolylinesRef.current.push(
+            basePolyline,
+            glowPolyline,
+            beamPolyline,
+          );
 
           let tick = 0;
           const intervalId = window.setInterval(() => {
             tick += 1;
 
-            const phase = tick / 4 + corridorIndex * 0.45 + pathIndex * 0.2;
+            const phase = tick / 3 + corridorIndex * 0.35 + pathIndex * 0.15;
             const pulse = (Math.sin(phase) + 1) / 2;
-            const flowOffset =
-              (tick * 2 + corridorIndex * 11 + pathIndex * 4) % 100;
+
+            const headPercent =
+              ((tick * BEAM_SPEED_PERCENT_PER_TICK + phaseOffsetPercent) %
+                100) /
+              100;
+            const beamLengthDistance = totalLength * BEAM_LENGTH_RATIO;
+            const headDistance = headPercent * totalLength;
+            const tailDistance = Math.max(0, headDistance - beamLengthDistance);
+            const beamPath = extractSegmentPath(
+              path,
+              cumulative,
+              tailDistance,
+              headDistance,
+            );
+
+            if (beamPath.length < 2) {
+              return;
+            }
 
             glowPolyline.setOptions({
-              strokeOpacity: 0.35 + pulse * 0.55,
-              strokeWeight: 5 + pulse * 4,
+              path: beamPath,
+              strokeOpacity: 0.26 + pulse * 0.5,
+              strokeWeight: 6.5 + pulse * 3,
             });
 
-            flowPolyline.setOptions({
-              strokeOpacity: 0.65 + pulse * 0.35,
-              icons: [
-                {
-                  icon: {
-                    path: window.google.maps.SymbolPath.CIRCLE,
-                    scale: 3 + pulse * 1.8,
-                    fillColor: "#ffffff",
-                    fillOpacity: 1,
-                    strokeOpacity: 0,
-                  },
-                  offset: `${flowOffset}%`,
-                },
-              ],
+            beamPolyline.setOptions({
+              path: beamPath,
+              strokeOpacity: 0.7 + pulse * 0.3,
+              strokeWeight: 3.6 + pulse * 1.2,
             });
-          }, 90);
+          }, BEAM_INTERVAL_MS);
 
           loadingAnimationIntervalsRef.current.push(intervalId);
           drawnPathCount += 1;
-        });
-      });
+        },
+      );
 
       if (hasBoundPoint) {
         mapInstance.fitBounds(bounds, 80);
@@ -192,11 +340,11 @@ export const usePredictionLoadingCorridors = ({
     const didDrawImmediately = tryDrawCorridors();
 
     if (!didDrawImmediately) {
-      mapWaitIntervalId = window.setInterval(() => {
+      mapWaitIntervalRef.current = window.setInterval(() => {
         const didDraw = tryDrawCorridors();
-        if (didDraw && mapWaitIntervalId !== null) {
-          window.clearInterval(mapWaitIntervalId);
-          mapWaitIntervalId = null;
+        if (didDraw && mapWaitIntervalRef.current !== null) {
+          window.clearInterval(mapWaitIntervalRef.current);
+          mapWaitIntervalRef.current = null;
         }
       }, 120);
     }

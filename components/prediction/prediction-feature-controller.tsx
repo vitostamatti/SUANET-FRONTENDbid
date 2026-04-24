@@ -37,9 +37,12 @@ export function PredictionFeatureController({
   selectedPredictionTimeslot,
   onPredictionTimeslotChange,
   predictionStepMinutes,
+  predictionCitywideFullHorizonMode,
+  onPredictionCitywideFullHorizonModeChange,
 }: PredictionFeatureControllerProps) {
   const isPredictionLayerActive = isPredictionLayerOption(opcDropdownVel);
   const lastZoomedRegionRef = useRef("");
+  const lastPredictionViewportRef = useRef("");
 
   const {
     selectedPredictionSegment,
@@ -80,14 +83,26 @@ export function PredictionFeatureController({
 
   useEffect(() => {
     if (predictionAnalysisLoading) {
-      // Force a fresh region fit after loading animation completes.
+      // Force a fresh fit after loading animation completes.
       lastZoomedRegionRef.current = "";
+      lastPredictionViewportRef.current = "";
     }
   }, [predictionAnalysisLoading]);
 
   useEffect(() => {
+    if (predictionCitywideFullHorizonMode && isPredictionPlaying) {
+      setIsPredictionPlaying(false);
+    }
+  }, [
+    predictionCitywideFullHorizonMode,
+    isPredictionPlaying,
+    setIsPredictionPlaying,
+  ]);
+
+  useEffect(() => {
     if (!isPredictionLayerActive) {
       lastZoomedRegionRef.current = "";
+      lastPredictionViewportRef.current = "";
       return;
     }
 
@@ -155,6 +170,75 @@ export function PredictionFeatureController({
     selectedPredictionRegion,
   ]);
 
+  useEffect(() => {
+    const isCitywideViewport =
+      isPredictionLayerActive &&
+      predictionCitywideFullHorizonMode &&
+      !selectedPredictionRegion;
+
+    if (!isCitywideViewport) {
+      return;
+    }
+
+    const mapInstance = mapInstanceRef.current;
+    if (
+      !mapInstance ||
+      !window.google ||
+      predictionCongestionData.length === 0
+    ) {
+      return;
+    }
+
+    const viewportKey = `citywide:${predictionCongestionData.length}:${predictionCongestionData[0]?.roadId || ""}:${predictionCongestionData[predictionCongestionData.length - 1]?.roadId || ""}`;
+
+    if (lastPredictionViewportRef.current === viewportKey) {
+      return;
+    }
+
+    const bounds = new window.google.maps.LatLngBounds();
+    let hasAtLeastOnePoint = false;
+
+    predictionCongestionData.forEach((segment) => {
+      segment.coordinates.forEach((coordinate) => {
+        const lng = Number(coordinate[0]);
+        const lat = Number(coordinate[1]);
+
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+          return;
+        }
+
+        bounds.extend({ lat, lng });
+        hasAtLeastOnePoint = true;
+      });
+    });
+
+    if (!hasAtLeastOnePoint) {
+      return;
+    }
+
+    mapInstance.fitBounds(bounds, 24);
+
+    window.setTimeout(() => {
+      const currentZoom = mapInstance.getZoom();
+      const maximumCitywideZoom = 12.5;
+
+      if (
+        typeof currentZoom === "number" &&
+        currentZoom > maximumCitywideZoom
+      ) {
+        mapInstance.setZoom(maximumCitywideZoom);
+      }
+    }, 40);
+
+    lastPredictionViewportRef.current = viewportKey;
+  }, [
+    isPredictionLayerActive,
+    mapInstanceRef,
+    predictionCitywideFullHorizonMode,
+    predictionCongestionData,
+    selectedPredictionRegion,
+  ]);
+
   return (
     <>
       {isPredictionLayerActive && predictionWidgetVisible && (
@@ -168,10 +252,15 @@ export function PredictionFeatureController({
           predictionTimeframes={predictionTimeframes}
           displayedTimeslotIndex={displayedTimeslotIndex}
           canControlTimeline={
-            canControlTimeline && !predictionInteractionDisabled
+            canControlTimeline &&
+            !predictionInteractionDisabled &&
+            !predictionCitywideFullHorizonMode
           }
           predictionLoading={predictionLoading}
-          predictionNoDataMessage={predictionNoDataMessage}
+          predictionCitywideFullHorizonMode={predictionCitywideFullHorizonMode}
+          onPredictionCitywideFullHorizonModeChange={
+            onPredictionCitywideFullHorizonModeChange
+          }
           isPredictionPlaying={isPredictionPlaying}
           setIsPredictionPlaying={setIsPredictionPlaying}
           moveTimeslot={moveTimeslot}
