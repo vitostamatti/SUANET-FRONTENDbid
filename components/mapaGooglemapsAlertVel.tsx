@@ -323,70 +323,258 @@ export default function MapaGoogleMapsAlertVel({
             typeof focus.affectedCount === "number"
               ? String(focus.affectedCount)
               : "N/A";
+          const peakDateTimeLabel =
+            peakDay === "N/A" && peakHour === "N/A"
+              ? "N/A"
+              : `${peakDay} ${peakHour}`.trim();
+
+          const coordinateLabel = `${focus.center.lat.toFixed(6)}, ${focus.center.lng.toFixed(6)}`;
 
           const content = document.createElement("div");
-          content.classList.add("property");
-          content.style.minWidth = "300px";
-          content.style.height = "auto";
-          content.style.padding = "8px";
+          content.style.minWidth = "330px";
+          content.style.maxWidth = "360px";
+          content.style.display = "flex";
+          content.style.flexDirection = "column";
+          content.style.overflow = "hidden";
+          content.style.borderRadius = "0";
+          content.style.background = "#ffffff";
+          content.style.border = "1px solid rgba(251, 146, 60, 0.22)";
+          content.style.boxShadow = "0 16px 40px rgba(15, 23, 42, 0.18)";
+          content.style.fontFamily =
+            "ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif";
+          content.style.boxSizing = "border-box";
+
+          const header = document.createElement("div");
+          header.style.display = "flex";
+          header.style.alignItems = "flex-start";
+          header.style.gap = "12px";
+          header.style.padding = "14px 16px 12px";
+          header.style.background =
+            "linear-gradient(135deg, #fff7ed 0%, #ffedd5 45%, #fee2e2 100%)";
+          header.style.borderBottom = "1px solid rgba(148, 163, 184, 0.16)";
 
           const iconDiv = document.createElement("div");
-          iconDiv.classList.add("icon");
+          iconDiv.style.width = "44px";
+          iconDiv.style.height = "44px";
+          iconDiv.style.flexShrink = "0";
+          iconDiv.style.display = "flex";
+          iconDiv.style.alignItems = "center";
+          iconDiv.style.justifyContent = "center";
+          iconDiv.style.borderRadius = "14px";
+          iconDiv.style.background =
+            "linear-gradient(135deg, #f97316 0%, #dc2626 100%)";
+          iconDiv.style.boxShadow = "0 10px 18px rgba(249, 115, 22, 0.24)";
           const iconImg = document.createElement("img");
           iconImg.src = iconUrlCongestion2;
           iconImg.alt = "Alerta futura";
           iconImg.title = "Alerta futura";
+          iconImg.style.width = "24px";
+          iconImg.style.height = "24px";
+          iconImg.style.filter = "brightness(0) invert(1)";
           iconDiv.appendChild(iconImg);
 
           const detailsDiv = document.createElement("div");
-          detailsDiv.classList.add("details");
+          detailsDiv.style.display = "flex";
+          detailsDiv.style.flexDirection = "column";
+          detailsDiv.style.gap = "6px";
+          detailsDiv.style.width = "100%";
+
+          const eyebrowDiv = document.createElement("div");
+          eyebrowDiv.textContent = "ALERTA FUTURA";
+          eyebrowDiv.style.fontSize = "10px";
+          eyebrowDiv.style.fontWeight = "700";
+          eyebrowDiv.style.letterSpacing = "0.08em";
+          eyebrowDiv.style.color = "#c2410c";
+          detailsDiv.appendChild(eyebrowDiv);
 
           const titleDiv = document.createElement("div");
-          titleDiv.classList.add("id");
           titleDiv.textContent = focus.roadName || "Tramo sin nombre";
+          titleDiv.style.fontSize = "19px";
+          titleDiv.style.fontWeight = "800";
+          titleDiv.style.lineHeight = "1.3";
+          titleDiv.style.color = "#111827";
           detailsDiv.appendChild(titleDiv);
 
-          const alertIdDiv = document.createElement("div");
-          alertIdDiv.classList.add("specifics");
-          alertIdDiv.textContent = `Alerta futura ID: ${focus.alertId}`;
-          detailsDiv.appendChild(alertIdDiv);
+          const subtitleDiv = document.createElement("div");
+          subtitleDiv.textContent =
+            "Pronostico de congestion para este corredor";
+          subtitleDiv.style.fontSize = "12px";
+          subtitleDiv.style.lineHeight = "1.4";
+          subtitleDiv.style.color = "#6b7280";
+          detailsDiv.appendChild(subtitleDiv);
 
-          const severityDiv = document.createElement("div");
-          severityDiv.classList.add("specifics");
-          severityDiv.textContent = `Severidad: ${severityLabel} | Nivel: ${predictedLevelLabel}`;
-          detailsDiv.appendChild(severityDiv);
+          header.appendChild(iconDiv);
+          header.appendChild(detailsDiv);
 
-          const featuresDiv = document.createElement("div");
-          featuresDiv.classList.add("features");
+          const body = document.createElement("div");
+          body.style.display = "flex";
+          body.style.flexDirection = "column";
+          body.style.gap = "12px";
+          body.style.padding = "14px 16px 16px";
 
-          const appendFeature = (src: string, title: string, text: string) => {
-            const feature = document.createElement("div");
+          const chipsRow = document.createElement("div");
+          chipsRow.style.display = "flex";
+          chipsRow.style.flexWrap = "wrap";
+          chipsRow.style.gap = "8px";
+
+          const buildChip = (label: string, value: string) => {
+            const chip = document.createElement("span");
+            chip.textContent = `${label}: ${value}`;
+            chip.style.fontSize = "11px";
+            chip.style.fontWeight = "600";
+            chip.style.color = "#92400e";
+            chip.style.background = "#fff7ed";
+            chip.style.border = "1px solid #fed7aa";
+            chip.style.borderRadius = "999px";
+            chip.style.padding = "4px 10px";
+            chip.style.display = "inline-flex";
+            chip.style.alignItems = "center";
+            return chip;
+          };
+
+          chipsRow.appendChild(buildChip("Fecha", peakDateTimeLabel));
+          body.appendChild(chipsRow);
+
+          const statsGrid = document.createElement("div");
+          statsGrid.style.display = "grid";
+          statsGrid.style.gridTemplateColumns = "repeat(2, minmax(0, 1fr))";
+          statsGrid.style.gap = "10px";
+
+          const buildStatCard = (
+            label: string,
+            value: string,
+            accent: string,
+            tint: string,
+          ) => {
+            const statCard = document.createElement("div");
+            statCard.style.display = "flex";
+            statCard.style.flexDirection = "column";
+            statCard.style.gap = "4px";
+            statCard.style.padding = "12px";
+            statCard.style.borderRadius = "12px";
+            statCard.style.background = tint;
+            statCard.style.border = `1px solid ${accent}22`;
+
+            const statLabel = document.createElement("span");
+            statLabel.textContent = label;
+            statLabel.style.fontSize = "10px";
+            statLabel.style.fontWeight = "700";
+            statLabel.style.letterSpacing = "0.06em";
+            statLabel.style.textTransform = "uppercase";
+            statLabel.style.color = accent;
+
+            const statValue = document.createElement("span");
+            statValue.textContent = value;
+            statValue.style.fontSize = "22px";
+            statValue.style.fontWeight = "800";
+            statValue.style.lineHeight = "1.1";
+            statValue.style.color = "#111827";
+
+            statCard.appendChild(statLabel);
+            statCard.appendChild(statValue);
+
+            return statCard;
+          };
+
+          statsGrid.appendChild(
+            buildStatCard(
+              "Nivel estimado",
+              predictedLevelLabel,
+              "#c2410c",
+              "#fff7ed",
+            ),
+          );
+          statsGrid.appendChild(
+            buildStatCard("Severidad", severityLabel, "#be123c", "#fff1f2"),
+          );
+          body.appendChild(statsGrid);
+
+          const metricsPanel = document.createElement("div");
+          metricsPanel.style.display = "grid";
+          metricsPanel.style.gridTemplateColumns = "1fr 1fr";
+          metricsPanel.style.gap = "8px";
+
+          const buildMetric = (
+            src: string,
+            title: string,
+            label: string,
+            text: string,
+          ) => {
+            const metric = document.createElement("div");
+            metric.style.display = "flex";
+            metric.style.alignItems = "center";
+            metric.style.gap = "9px";
+            metric.style.padding = "10px";
+            metric.style.borderRadius = "12px";
+            metric.style.background = "#f8fafc";
+            metric.style.border = "1px solid #e2e8f0";
+
             const img = document.createElement("img");
             img.src = src;
             img.alt = `${title} icon`;
             img.title = title;
+            img.style.width = "16px";
+            img.style.height = "16px";
 
-            const span = document.createElement("span");
-            span.textContent = text;
+            const textWrapper = document.createElement("div");
+            textWrapper.style.display = "flex";
+            textWrapper.style.flexDirection = "column";
+            textWrapper.style.gap = "2px";
+            textWrapper.style.minWidth = "0";
 
-            feature.appendChild(img);
-            feature.appendChild(span);
-            featuresDiv.appendChild(feature);
+            const labelSpan = document.createElement("span");
+            labelSpan.textContent = label;
+            labelSpan.style.fontSize = "10px";
+            labelSpan.style.fontWeight = "700";
+            labelSpan.style.letterSpacing = "0.04em";
+            labelSpan.style.textTransform = "uppercase";
+            labelSpan.style.color = "#64748b";
+
+            const valueSpan = document.createElement("span");
+            valueSpan.textContent = text;
+            valueSpan.style.fontSize = "12px";
+            valueSpan.style.fontWeight = "700";
+            valueSpan.style.color = "#0f172a";
+            valueSpan.style.lineHeight = "1.3";
+            valueSpan.style.wordBreak = "break-word";
+
+            metric.appendChild(img);
+            textWrapper.appendChild(labelSpan);
+            textWrapper.appendChild(valueSpan);
+            metric.appendChild(textWrapper);
+
+            return metric;
           };
 
-          appendFeature(iconAfectados, "Afectados", affectedLabel);
-          appendFeature(iconUrlClockCongestion, "Hora pico", peakHour);
-          appendFeature(iconUrlCalendar, "Fecha", peakDay);
-          appendFeature(
+          metricsPanel.appendChild(
+            buildMetric(
+              iconAfectados,
+              "Afectados",
+              "Vehiculos afectados",
+              affectedLabel,
+            ),
+          );
+          metricsPanel.appendChild(
+            buildMetric(
+              iconUrlClockCongestion,
+              "Hora pico",
+              "Hora pico",
+              peakHour,
+            ),
+          );
+          body.appendChild(metricsPanel);
+
+          const coordinatesCard = buildMetric(
             iconCoordenadas,
             "Coordenadas",
-            `${focus.center.lat.toFixed(6)}, ${focus.center.lng.toFixed(6)}`,
+            "Centro del evento",
+            coordinateLabel,
           );
 
-          detailsDiv.appendChild(featuresDiv);
+          body.appendChild(coordinatesCard);
 
-          content.appendChild(iconDiv);
-          content.appendChild(detailsDiv);
+          content.appendChild(header);
+          content.appendChild(body);
 
           return content;
         };
@@ -403,9 +591,45 @@ export default function MapaGoogleMapsAlertVel({
             lng: focus.center.lng,
           };
 
-          infoWindow.setContent(getFutureAlertInfoContent());
+          const content = getFutureAlertInfoContent();
+
+          infoWindow.setContent(content);
           infoWindow.setPosition(position);
           infoWindow.open({ map: mapInstance });
+
+          window.google.maps.event.addListenerOnce(
+            infoWindow,
+            "domready",
+            () => {
+              const scrollContainer =
+                content.parentElement as HTMLElement | null;
+              const shell =
+                scrollContainer?.parentElement as HTMLElement | null;
+              const shellParent = shell?.parentElement as HTMLElement | null;
+
+              if (scrollContainer) {
+                scrollContainer.style.padding = "0";
+                scrollContainer.style.overflow = "visible";
+                scrollContainer.style.background = "transparent";
+              }
+
+              if (shell) {
+                shell.style.padding = "0";
+                shell.style.background = "#ffffff";
+                shell.style.boxShadow = "none";
+                shell.style.borderRadius = "0";
+              }
+
+              if (shellParent) {
+                shellParent.style.padding = "0";
+                shellParent.style.background = "#ffffff";
+                shellParent.style.boxShadow =
+                  "0 10px 24px rgba(15, 23, 42, 0.16)";
+                shellParent.style.overflow = "visible";
+                shellParent.style.borderRadius = "0";
+              }
+            },
+          );
         };
 
         glowPolyline.setMap(mapInstance);
